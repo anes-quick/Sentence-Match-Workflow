@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sentence Match Workflow</title>
+  <style>
+    :root { --bg:#0f0f10; --surface:#18181b; --text:#fafafa; --muted:#71717a; --accent:#e8ff47; --border:#27272a; --error:#f87171; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+    .main-title-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+    .main-title-row h1 { margin: 0; }
+    .header-voice-wrap { position: relative; }
+    .voice-dropdown-btn { padding: 0.4rem 0.75rem; font-size: 0.85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 0.35rem; }
+    .voice-dropdown-btn:hover { border-color: var(--muted); }
+    .voice-dropdown-btn::after { content: '▾'; font-size: 0.7rem; color: var(--muted); }
+    .voice-dropdown-menu { position: absolute; top: 100%; right: 0; margin-top: 0.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); min-width: 140px; z-index: 100; display: none; overflow: hidden; }
+    .voice-dropdown-menu.open { display: block; }
+    .voice-option { display: block; width: 100%; padding: 0.5rem 0.75rem; font-size: 0.9rem; text-align: left; border: none; background: transparent; color: var(--text); cursor: pointer; border-left: 3px solid transparent; }
+    .voice-option:hover { background: rgba(255,255,255,0.06); }
+    .voice-option.selected { font-weight: 600; }
+    .voice-option.voice-fastmf { border-left-color: #e8ff47; }
+    .voice-option.voice-helmut { border-left-color: #22d3ee; }
+    .voice-option.voice-lars { border-left-color: #fb923c; }
+    .layout { display: flex; gap: 1.5rem; padding: 1.5rem; max-width: 1200px; margin: 0 auto; min-height: calc(100vh - 52px); }
+    .main { flex: 1; min-width: 0; }
+    .history-sidebar { width: 220px; flex-shrink: 0; border-left: 1px solid var(--border); padding-left: 1rem; }
+    .history-sidebar h2 { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.75rem; }
+    .history-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .history-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.6rem; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; min-width: 0; max-width: 100%; }
+    .history-card:hover { border-color: var(--muted); background: #1f1f23; }
+    .history-card.active { border-color: var(--accent); background: rgba(232, 255, 71, 0.06); }
+    .history-card .label { font-size: 0.8rem; color: var(--text); display: block; min-width: 0; word-break: break-word; line-height: 1.3; }
+    .history-card .meta { font-size: 0.7rem; color: var(--muted); margin-top: 0.35rem; display: block; min-width: 0; }
+    h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+    .status { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.5rem; }
+    .input-row { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .input-row input { flex: 1; padding: 0.6rem 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.95rem; }
+    .input-row input::placeholder { color: var(--muted); }
+    .input-row input:focus { outline: none; border-color: var(--accent); }
+    .btn { padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.95rem; font-weight: 500; cursor: pointer; border: none; }
+    .btn-primary { background: var(--accent); color: var(--bg); }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-copy { padding: 0.35rem 0.6rem; font-size: 0.8rem; background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+    .btn-copy:hover { color: var(--accent); border-color: var(--accent); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+    .card-title { font-size: 0.85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .card-content { font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
+    .card-content.empty { color: var(--muted); font-style: italic; }
+    .card.loading .card-content { position: relative; overflow: hidden !important; }
+    .card.loading .card-content::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent); animation: shimmer 1.2s infinite; pointer-events: none; }
+    @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+    .card.loading .card-content { color: var(--muted); }
+    .title-card { padding: 0.35rem 0.75rem; margin-bottom: 1rem; }
+    .title-card .card-header { margin-bottom: 0; align-items: center; }
+    .title-card .card-content { max-height: none; overflow: visible; padding: 0; font-size: 0.875rem; line-height: 1.35; }
+    .error { color: var(--error); font-size: 0.9rem; margin-top: 0.5rem; }
+    .scroll-dark { scrollbar-width: thin; scrollbar-color: var(--border) var(--bg); }
+    .scroll-dark::-webkit-scrollbar { width: 8px; height: 8px; }
+    .scroll-dark::-webkit-scrollbar-track { background: var(--bg); border-radius: 4px; }
+    .scroll-dark::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .scroll-dark::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+    /* Voice-over card: same height as Credits; controls always visible, greyed when no audio */
+    .voiceover-card { padding: 1rem; margin-bottom: 1rem; }
+    .voiceover-card .card-header { margin-bottom: 0.5rem; }
+    .voiceover-card .card-content { max-height: none; }
+    .voiceover-content { padding: 0; font-size: 0.9rem; line-height: 1.5; height: 1.35rem; min-height: 1.35rem; max-height: 1.35rem; overflow: visible; display: flex; align-items: center; gap: 0.5rem; }
+    .voiceover-content audio { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+    .voiceover-controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: nowrap; min-height: 0; flex: 1; min-width: 0; }
+    .voiceover-card .btn-play { width: 1.35rem; height: 1.35rem; min-width: 1.35rem; min-height: 1.35rem; max-height: 1.35rem; font-size: 0.6rem; box-sizing: border-box; padding: 0; border-radius: 50%; background: var(--accent); color: var(--bg); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .voiceover-card .btn-play:hover { filter: brightness(1.1); }
+    .voiceover-card .btn-play.playing { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); }
+    .voiceover-card:not(.ready) .btn-play { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+    .voiceover-card .voiceover-seek { height: 4px; min-height: 4px; flex: 1; min-width: 60px; -webkit-appearance: none; appearance: none; background: var(--border); border-radius: 3px; }
+    .voiceover-card .voiceover-seek::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+    .voiceover-card .voiceover-seek::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); cursor: pointer; border: none; }
+    .voiceover-card:not(.ready) .voiceover-seek { opacity: 0.45; pointer-events: none; }
+    .voiceover-card:not(.ready) .voiceover-seek::-webkit-slider-thumb { background: var(--muted); }
+    .voiceover-card:not(.ready) .voiceover-seek::-moz-range-thumb { background: var(--muted); }
+    .voiceover-card .voiceover-time { line-height: 1; font-size: 0.75rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+    .voiceover-card:not(.ready) .voiceover-time { opacity: 0.7; }
+    .voiceover-status { font-style: italic; color: var(--muted); font-size: 0.8rem; flex-shrink: 0; white-space: nowrap; }
+    .voiceover-card.ready .voiceover-status { display: none; }
+    .voiceover-card .card-header .btn-copy#voiceoverDownloadBtn { transition: opacity 0.2s; }
+    .voiceover-card:not(.ready) .card-header .btn-copy#voiceoverDownloadBtn { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+    .btn-play { width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--accent); color: var(--bg); border: none; cursor: pointer; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
+    .btn-play:hover { filter: brightness(1.1); }
+    .btn-play.playing { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 200; }
+    .modal-backdrop.open { display: flex; }
+    .modal { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); padding: 1rem 1.25rem 1.1rem; max-width: 360px; width: 100%; box-shadow: 0 18px 40px rgba(0,0,0,0.6); }
+    .modal h2 { margin: 0 0 0.75rem; font-size: 1rem; }
+    .modal-row { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.6rem; }
+    .modal-row label { font-size: 0.8rem; color: var(--muted); }
+    .modal-row input, .modal-row select { padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.9rem; }
+    .modal-row input:focus, .modal-row select:focus { outline: none; border-color: var(--accent); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.4rem; }
+    .btn-ghost { padding: 0.45rem 0.8rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 0.85rem; cursor: pointer; }
+    .btn-ghost:hover { border-color: var(--muted); color: var(--text); }
+    .btn-small { padding: 0.45rem 0.9rem; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <span>Sentence Match Workflow</span>
+  </header>
+  <div class="layout">
+    <main class="main">
+      <div class="main-title-row">
+        <h1>Sentence Match Workflow</h1>
+        <div class="header-voice-wrap">
+          <button type="button" class="voice-dropdown-btn" id="voiceDropdownBtn" aria-haspopup="true" aria-expanded="false">Voice</button>
+          <div class="voice-dropdown-menu" id="voiceDropdownMenu" role="menu">
+            <button type="button" class="voice-option voice-fastmf" role="menuitem" data-voice-key="fast_mf" data-voice-label="Fast MF">Fast MF</button>
+            <button type="button" class="voice-option voice-helmut" role="menuitem" data-voice-key="helmut" data-voice-label="Helmut">Helmut</button>
+            <button type="button" class="voice-option voice-lars" role="menuitem" data-voice-key="lars" data-voice-label="Lars">Lars</button>
+          </div>
+        </div>
+      </div>
+      <p class="status" id="status">Checking backend…</p>
+
+      <div class="input-row">
+        <input type="text" id="videoUrl" placeholder="Paste YouTube URL or video ID" autocomplete="off" />
+        <button type="button" class="btn btn-primary" id="processBtn">Process</button>
+      </div>
+      <p id="apiError" class="error" style="display: none;"></p>
+
+      <div id="results">
+        <div class="card title-card">
+          <div class="card-header">
+            <span class="card-title">Title</span>
+            <button type="button" class="btn btn-copy" id="copyTranslatedTitle" title="Copy German title">Copy (DE)</button>
+          </div>
+          <div class="card-content" id="out-translated_title">—</div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Sentence match</span>
+            <button type="button" class="btn btn-copy" data-copy="sentence_match">Copy</button>
+          </div>
+          <div class="card-content scroll-dark empty" id="out-sentence_match">—</div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">TTS text</span>
+            <button type="button" class="btn btn-copy" data-copy="tts_text">Copy</button>
+          </div>
+          <div class="card-content scroll-dark empty" id="out-tts_text">—</div>
+        </div>
+        <div class="card voiceover-card" id="voiceoverCard">
+          <div class="card-header">
+            <span class="card-title">Voice-over</span>
+            <button type="button" class="btn btn-copy" id="voiceoverDownloadBtn" title="Download MP3">Download</button>
+          </div>
+          <div class="card-content voiceover-content">
+            <audio id="voiceoverAudio" preload="metadata"></audio>
+            <div class="voiceover-controls" id="voiceoverControls">
+              <button type="button" class="btn btn-play" id="voiceoverPlayBtn" title="Play / Pause" aria-label="Play">▶</button>
+              <input type="range" class="voiceover-seek" id="voiceoverSeek" min="0" max="100" value="0" step="0.1" />
+              <span class="voiceover-time" id="voiceoverTime">0:00 / 0:00</span>
+            </div>
+            <span class="voiceover-status" id="voiceoverStatus"></span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Credits</span>
+            <button type="button" class="btn btn-copy" data-copy="credits">Copy</button>
+          </div>
+          <div class="card-content scroll-dark empty" id="out-credits">—</div>
+        </div>
+      </div>
+      <div style="margin-top: 1.5rem;">
+        <button type="button" class="btn btn-primary" id="createTrelloBtn">Create Trello card</button>
+      </div>
+    </main>
+    <aside class="history-sidebar">
+      <h2>History</h2>
+      <div class="history-list" id="historyList"></div>
+    </aside>
+  </div>
+  <div class="modal-backdrop" id="trelloModalBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="trelloModalTitle">
+      <h2 id="trelloModalTitle">Trello details</h2>
+      <div class="modal-row">
+        <label for="trelloChannel">Channel (for card title)</label>
+        <select id="trelloChannel">
+          <option value="">Select channel…</option>
+          <option value="CM">CM</option>
+          <option value="Nunito">Nunito</option>
+          <option value="Mira">Mira</option>
+          <option value="Aven">Aven</option>
+          <option value="Asenti">Asenti</option>
+        </select>
+      </div>
+      <div class="modal-row">
+        <label for="trelloVideoNumber">Video number for the day</label>
+        <select id="trelloVideoNumber">
+          <option value="">Select number…</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="trelloModalCancel">Cancel</button>
+        <button type="button" class="btn btn-primary btn-small" id="trelloModalConfirm">Create</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const BACKEND_URL = (!window.location.hostname || /localhost|127\.0\.0\.1/.test(window.location.hostname))
+      ? 'http://localhost:8001'
+      : 'https://YOUR-RAILWAY-APP.up.railway.app';
+
+    const statusEl = document.getElementById('status');
+    const videoUrlEl = document.getElementById('videoUrl');
+    const processBtn = document.getElementById('processBtn');
+    const apiErrorEl = document.getElementById('apiError');
+    const resultsEl = document.getElementById('results');
+    const historyListEl = document.getElementById('historyList');
+
+    const HISTORY_STORAGE_KEY = 'sentence-match-history';
+    const VOICEOVER_STORAGE_KEY = 'sentence-match-voiceovers';
+    const VOICE_STORAGE_KEY = 'sentence-match-voice';
+    const TRELLO_PREFS_STORAGE_KEY = 'sentence-match-trello-prefs';
+    const TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+    let lastResult = null;
+    let currentVideoUrl = '';
+    let history = [];
+    let activeHistoryId = null;
+    let currentVoiceoverUrl = null;
+    let currentVoiceoverBlob = null;
+    let selectedVoiceKey = 'fast_mf';
+    let selectedVoiceLabel = 'Fast MF';
+    let trelloChannel = '';
+    let trelloVideoNumber = '';
+
+    function getStorage() {
+      try {
+        if (window.location.protocol === 'file:') return sessionStorage;
+        return localStorage;
+      } catch (_) {}
+      try { return sessionStorage; } catch (_) {}
+      return null;
+    }
+
+    function isWithinTTL(item) {
+      if (item.createdAt == null) return false;
+      const ts = typeof item.createdAt === 'number' ? item.createdAt : new Date(item.createdAt).getTime();
+      if (isNaN(ts)) return false;
+      return (Date.now() - ts) < TTL_MS;
+    }
+
+    function loadHistory() {
+      const storage = getStorage();
+      if (!storage) return [];
+      try {
+        const raw = storage.getItem(HISTORY_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        parsed.forEach(function (item) {
+          if (typeof item.createdAt !== 'number' && item.createdAt != null)
+            item.createdAt = new Date(item.createdAt).getTime();
+        });
+        return parsed.filter(isWithinTTL);
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function saveHistory() {
+      const storage = getStorage();
+      if (!storage) return;
+      const toSave = history.filter(isWithinTTL);
+      try {
+        storage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(toSave));
+      } catch (e) {
+        try {
+          storage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(toSave.slice(0, 10)));
+        } catch (_) {}
+      }
+    }
+
+    function loadVoiceovers() {
+      const storage = getStorage();
+      if (!storage) return {};
+      try {
+        const raw = storage.getItem(VOICEOVER_STORAGE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return {};
+        const now = Date.now();
+        const out = {};
+        Object.keys(parsed).forEach(function (id) {
+          const entry = parsed[id];
+          if (entry && entry.createdAt != null && (now - entry.createdAt) < TTL_MS && entry.data)
+            out[id] = entry;
+        });
+        return out;
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function saveVoiceover(historyId, blob) {
+      const storage = getStorage();
+      if (!storage || !historyId || !blob) return;
+      const reader = new FileReader();
+      reader.onload = function () {
+        let data = reader.result;
+        if (typeof data === 'string' && data.indexOf('base64,') !== -1) data = data.split('base64,')[1];
+        try {
+          const all = loadVoiceovers();
+          all[historyId] = { data: data, createdAt: Date.now() };
+          const toSave = {};
+          const now = Date.now();
+          Object.keys(all).forEach(function (id) {
+            if (all[id].createdAt != null && (now - all[id].createdAt) < TTL_MS) toSave[id] = all[id];
+          });
+          storage.setItem(VOICEOVER_STORAGE_KEY, JSON.stringify(toSave));
+        } catch (e) {
+          try {
+            storage.removeItem(VOICEOVER_STORAGE_KEY);
+          } catch (_) {}
+        }
+      };
+      reader.readAsDataURL(blob);
+    }
+
+    function blobFromBase64(base64) {
+      try {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: 'audio/mpeg' });
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function restoreVoiceoverForId(historyId) {
+      const store = loadVoiceovers();
+      const entry = store[historyId];
+      if (!entry || !entry.data) return false;
+      const blob = blobFromBase64(entry.data);
+      if (!blob) return false;
+      revokeCurrentVoiceover();
+      currentVoiceoverBlob = blob;
+      currentVoiceoverUrl = URL.createObjectURL(blob);
+      const audio = document.getElementById('voiceoverAudio');
+      audio.src = currentVoiceoverUrl;
+      audio.load();
+      document.getElementById('voiceoverSeek').value = 0;
+      audio.addEventListener('loadedmetadata', function onMeta() {
+        if (audio.duration != null && isFinite(audio.duration)) document.getElementById('voiceoverTime').textContent = '0:00 / ' + formatTime(audio.duration);
+        audio.removeEventListener('loadedmetadata', onMeta);
+      });
+      if (audio.duration != null && isFinite(audio.duration)) document.getElementById('voiceoverTime').textContent = '0:00 / ' + formatTime(audio.duration);
+      setVoiceoverState('ready');
+      return true;
+    }
+
+    fetch(`${BACKEND_URL}/api/health`)
+      .then(r => r.json())
+      .then(d => { statusEl.textContent = d.status === 'ok' ? 'Backend connected' : d.status; })
+      .catch(() => { statusEl.textContent = 'Backend unreachable'; });
+
+    function setCardsLoading(loading) {
+      resultsEl.querySelectorAll('.card').forEach(c => c.classList.toggle('loading', loading));
+    }
+
+    function setVoiceoverState(state) {
+      const card = document.getElementById('voiceoverCard');
+      const statusEl = document.getElementById('voiceoverStatus');
+      if (state === 'ready') {
+        card.classList.add('ready');
+        statusEl.textContent = '';
+      } else {
+        card.classList.remove('ready');
+        statusEl.textContent = state === 'loading' ? 'Generating…' : '—';
+      }
+    }
+
+    function revokeCurrentVoiceover() {
+      if (currentVoiceoverUrl) {
+        URL.revokeObjectURL(currentVoiceoverUrl);
+        currentVoiceoverUrl = null;
+      }
+      currentVoiceoverBlob = null;
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    async function fetchAndShowVoiceover(ttsText) {
+      if (!(ttsText || '').trim()) return;
+      revokeCurrentVoiceover();
+      setVoiceoverState('loading');
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/voiceover`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tts_text: ttsText, voice_key: selectedVoiceKey || undefined }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => null);
+          const msg = (err && err.detail) || res.statusText || 'Voice-over failed';
+          apiErrorEl.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg);
+          apiErrorEl.style.display = 'block';
+          setVoiceoverState('empty');
+          return;
+        }
+        const blob = await res.blob();
+        currentVoiceoverBlob = blob;
+        currentVoiceoverUrl = URL.createObjectURL(blob);
+        if (activeHistoryId) saveVoiceover(activeHistoryId, blob);
+        const audio = document.getElementById('voiceoverAudio');
+        audio.src = currentVoiceoverUrl;
+        audio.load();
+        document.getElementById('voiceoverSeek').value = 0;
+        document.getElementById('voiceoverTime').textContent = '0:00 / ' + formatTime(audio.duration || 0);
+        setVoiceoverState('ready');
+      } catch (e) {
+        apiErrorEl.textContent = (e && e.message) || 'Voice-over request failed';
+        apiErrorEl.style.display = 'block';
+        setVoiceoverState('empty');
+      }
+    }
+
+    function renderCards(data) {
+      if (!data) {
+        document.getElementById('out-translated_title').textContent = '—';
+        document.getElementById('out-sentence_match').textContent = '—';
+        document.getElementById('out-sentence_match').classList.add('empty');
+        document.getElementById('out-tts_text').textContent = '—';
+        document.getElementById('out-tts_text').classList.add('empty');
+        document.getElementById('out-credits').textContent = '—';
+        document.getElementById('out-credits').classList.add('empty');
+        return;
+      }
+      document.getElementById('out-translated_title').textContent = data.translated_title || '—';
+      const sm = document.getElementById('out-sentence_match');
+      sm.textContent = data.sentence_match || '';
+      sm.classList.toggle('empty', !(data.sentence_match || '').trim());
+      const tts = document.getElementById('out-tts_text');
+      tts.textContent = data.tts_text || '';
+      tts.classList.toggle('empty', !(data.tts_text || '').trim());
+      const cr = document.getElementById('out-credits');
+      cr.textContent = data.credits || '';
+      cr.classList.toggle('empty', !(data.credits || '').trim());
+    }
+
+    function addToHistory(data, videoUrl) {
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+      const label = (data && data.translated_title) ? data.translated_title.trim() : '—';
+      const createdAt = Date.now();
+      history.unshift({ id, data, url: videoUrl, label, createdAt });
+      history = history.filter(isWithinTTL);
+      activeHistoryId = id;
+      currentVideoUrl = videoUrl;
+      lastResult = data;
+      saveHistory();
+      renderCards(data);
+      renderHistory();
+    }
+
+    function formatHistoryDate(ts) {
+      const d = new Date(ts);
+      const date = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+      const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      return date + ', ' + time;
+    }
+
+    function renderHistory() {
+      historyListEl.innerHTML = '';
+      history.forEach((item) => {
+        const div = document.createElement('div');
+        div.className = 'history-card' + (item.id === activeHistoryId ? ' active' : '');
+        div.dataset.id = item.id;
+        const meta = item.createdAt != null ? formatHistoryDate(item.createdAt) : '';
+        const labelText = (item.label || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        div.innerHTML = '<span class="label">' + labelText + '</span><span class="meta">' + meta + '</span>';
+        div.addEventListener('click', () => {
+          activeHistoryId = item.id;
+          lastResult = item.data;
+          currentVideoUrl = item.url || '';
+          renderCards(item.data);
+          if (!restoreVoiceoverForId(item.id)) {
+            revokeCurrentVoiceover();
+            setVoiceoverState('empty');
+          }
+          renderHistory();
+        });
+        historyListEl.appendChild(div);
+      });
+    }
+
+    document.getElementById('copyTranslatedTitle').addEventListener('click', () => {
+      if (!lastResult || !lastResult.translated_title) return;
+      navigator.clipboard.writeText(lastResult.translated_title).then(() => {
+        const btn = document.getElementById('copyTranslatedTitle');
+        const t = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = t; }, 1500);
+      });
+    });
+
+    function applyVoiceSelection() {
+      const btn = document.getElementById('voiceDropdownBtn');
+      const menu = document.getElementById('voiceDropdownMenu');
+      if (btn) btn.textContent = 'Voice: ' + selectedVoiceLabel;
+      if (menu) {
+        menu.querySelectorAll('.voice-option').forEach(function (opt) {
+          opt.classList.toggle('selected', opt.getAttribute('data-voice-key') === selectedVoiceKey);
+        });
+      }
+    }
+
+    function loadSavedVoice() {
+      const storage = getStorage();
+      if (!storage) return;
+      try {
+        const raw = storage.getItem(VOICE_STORAGE_KEY);
+        if (!raw) return;
+        const o = JSON.parse(raw);
+        if (o && o.key && o.label) {
+          selectedVoiceKey = o.key;
+          selectedVoiceLabel = o.label;
+        } else if (o && o.id && o.label) {
+          selectedVoiceKey = o.id === 'z71EjgDq5DjMmSU6Azn9' ? 'fast_mf' : (o.id === 'JiW03c2Gt43XNUQAumRP' ? 'helmut' : 'lars');
+          selectedVoiceLabel = o.label;
+        }
+      } catch (_) {}
+    }
+
+    function saveVoiceSelection() {
+      const storage = getStorage();
+      if (!storage) return;
+      try {
+        storage.setItem(VOICE_STORAGE_KEY, JSON.stringify({ key: selectedVoiceKey, label: selectedVoiceLabel }));
+      } catch (_) {}
+    }
+
+    function loadTrelloPrefs() {
+      const storage = getStorage();
+      if (!storage) return;
+      try {
+        const raw = storage.getItem(TRELLO_PREFS_STORAGE_KEY);
+        if (!raw) return;
+        const o = JSON.parse(raw);
+        if (o && typeof o.channel === 'string') trelloChannel = o.channel;
+        if (o && (typeof o.videoNumber === 'string' || typeof o.videoNumber === 'number')) trelloVideoNumber = String(o.videoNumber);
+      } catch (_) {}
+    }
+
+    function saveTrelloPrefs() {
+      const storage = getStorage();
+      if (!storage) return;
+      try {
+        storage.setItem(TRELLO_PREFS_STORAGE_KEY, JSON.stringify({ channel: trelloChannel, videoNumber: trelloVideoNumber }));
+      } catch (_) {}
+    }
+
+    const voiceDropdownBtn = document.getElementById('voiceDropdownBtn');
+    const voiceDropdownMenu = document.getElementById('voiceDropdownMenu');
+    if (voiceDropdownBtn && voiceDropdownMenu) {
+      voiceDropdownBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        voiceDropdownMenu.classList.toggle('open');
+        voiceDropdownBtn.setAttribute('aria-expanded', voiceDropdownMenu.classList.contains('open'));
+      });
+      voiceDropdownMenu.querySelectorAll('.voice-option').forEach(function (opt) {
+        opt.addEventListener('click', function () {
+          selectedVoiceKey = opt.getAttribute('data-voice-key');
+          selectedVoiceLabel = opt.getAttribute('data-voice-label');
+          saveVoiceSelection();
+          applyVoiceSelection();
+          voiceDropdownMenu.classList.remove('open');
+          voiceDropdownBtn.setAttribute('aria-expanded', 'false');
+        });
+      });
+      document.addEventListener('click', function () {
+        voiceDropdownMenu.classList.remove('open');
+        voiceDropdownBtn.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    processBtn.addEventListener('click', async () => {
+      const url = videoUrlEl.value.trim();
+      if (!url) {
+        apiErrorEl.textContent = 'Please enter a YouTube URL or video ID.';
+        apiErrorEl.style.display = 'block';
+        return;
+      }
+      apiErrorEl.style.display = 'none';
+      apiErrorEl.textContent = '';
+      processBtn.disabled = true;
+      setCardsLoading(true);
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/process`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_url: url }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          apiErrorEl.textContent = data.detail || res.statusText || 'Request failed';
+          apiErrorEl.style.display = 'block';
+          return;
+        }
+        addToHistory(data, url);
+        if ((data.tts_text || '').trim()) fetchAndShowVoiceover(data.tts_text);
+      } finally {
+        processBtn.disabled = false;
+        processBtn.textContent = 'Process';
+        setCardsLoading(false);
+      }
+    });
+
+    document.querySelectorAll('[data-copy]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!lastResult) return;
+        const key = btn.getAttribute('data-copy');
+        const value = lastResult[key] || '';
+        navigator.clipboard.writeText(value).then(() => {
+          const t = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = t; }, 1500);
+        });
+      });
+    });
+
+    const voiceoverAudio = document.getElementById('voiceoverAudio');
+    const voiceoverPlayBtn = document.getElementById('voiceoverPlayBtn');
+    const voiceoverSeek = document.getElementById('voiceoverSeek');
+    const voiceoverTime = document.getElementById('voiceoverTime');
+    const voiceoverDownloadBtn = document.getElementById('voiceoverDownloadBtn');
+
+    voiceoverPlayBtn.addEventListener('click', () => {
+      if (!voiceoverAudio.src) return;
+      if (voiceoverAudio.paused) {
+        voiceoverAudio.play();
+        voiceoverPlayBtn.textContent = '❚❚';
+        voiceoverPlayBtn.classList.add('playing');
+      } else {
+        voiceoverAudio.pause();
+        voiceoverPlayBtn.textContent = '▶';
+        voiceoverPlayBtn.classList.remove('playing');
+      }
+    });
+    voiceoverAudio.addEventListener('pause', () => {
+      voiceoverPlayBtn.textContent = '▶';
+      voiceoverPlayBtn.classList.remove('playing');
+    });
+    voiceoverAudio.addEventListener('play', () => {
+      voiceoverPlayBtn.textContent = '❚❚';
+      voiceoverPlayBtn.classList.add('playing');
+    });
+    voiceoverAudio.addEventListener('timeupdate', () => {
+      const t = voiceoverAudio.currentTime;
+      const d = voiceoverAudio.duration;
+      if (isFinite(d) && d > 0) {
+        voiceoverSeek.value = (t / d) * 100;
+        voiceoverTime.textContent = formatTime(t) + ' / ' + formatTime(d);
+      }
+    });
+    voiceoverAudio.addEventListener('loadedmetadata', () => {
+      const d = voiceoverAudio.duration;
+      if (isFinite(d)) voiceoverTime.textContent = '0:00 / ' + formatTime(d);
+    });
+    voiceoverSeek.addEventListener('input', () => {
+      const d = voiceoverAudio.duration;
+      if (isFinite(d) && d > 0) voiceoverAudio.currentTime = (parseFloat(voiceoverSeek.value) / 100) * d;
+    });
+
+    voiceoverDownloadBtn.addEventListener('click', () => {
+      if (!currentVoiceoverBlob) return;
+      const url = URL.createObjectURL(currentVoiceoverBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'voiceover.mp3';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    const trelloModalBackdrop = document.getElementById('trelloModalBackdrop');
+    const trelloChannelInput = document.getElementById('trelloChannel');
+    const trelloVideoNumberInput = document.getElementById('trelloVideoNumber');
+    const trelloModalCancel = document.getElementById('trelloModalCancel');
+    const trelloModalConfirm = document.getElementById('trelloModalConfirm');
+
+    function openTrelloModal() {
+      if (!trelloModalBackdrop) return;
+      trelloChannelInput.value = trelloChannel || '';
+      trelloVideoNumberInput.value = trelloVideoNumber || '';
+      trelloModalBackdrop.classList.add('open');
+    }
+
+    function closeTrelloModal() {
+      if (!trelloModalBackdrop) return;
+      trelloModalBackdrop.classList.remove('open');
+    }
+
+    async function doCreateTrelloCard(forceNewFolder) {
+      if (!lastResult || !currentVideoUrl) {
+        apiErrorEl.textContent = 'Process a video first before creating a Trello card.';
+        apiErrorEl.style.display = 'block';
+        return;
+      }
+      const createTrelloBtn = document.getElementById('createTrelloBtn');
+      apiErrorEl.style.display = 'none';
+      apiErrorEl.textContent = '';
+      if (createTrelloBtn) {
+        createTrelloBtn.disabled = true;
+        var originalText = createTrelloBtn.textContent;
+        createTrelloBtn.textContent = 'Creating Trello card…';
+      }
+      try {
+        async function blobToBase64(blob) {
+          return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const s = String(reader.result || '');
+              const idx = s.indexOf(',');
+              resolve(idx >= 0 ? s.slice(idx + 1) : s);
+            };
+            reader.onerror = () => reject(reader.error || new Error('Failed to read blob'));
+            reader.readAsDataURL(blob);
+          });
+        }
+
+        const payload = {
+          video_url: currentVideoUrl,
+          translated_title: lastResult.translated_title || '',
+          sentence_match: lastResult.sentence_match || '',
+          credits: lastResult.credits || '',
+          source: lastResult.source || lastResult.credits || '',
+          channel: trelloChannel || '',
+          video_number: trelloVideoNumber ? Number(trelloVideoNumber) : null,
+          force_new_folder: !!forceNewFolder,
+        };
+        if (currentVoiceoverBlob) {
+          payload.voiceover_mp3_base64 = await blobToBase64(currentVoiceoverBlob);
+          payload.voiceover_filename = 'voiceover.mp3';
+        }
+        const res = await fetch(`${BACKEND_URL}/api/trello/create-card`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          apiErrorEl.textContent = data.detail || res.statusText || 'Trello card creation failed';
+          apiErrorEl.style.display = 'block';
+          return;
+        }
+        if (data.folder_existed && !forceNewFolder) {
+          const ok = window.confirm('A folder for this channel, date and video number already exists.\nCreate an additional folder (1) anyway?');
+          if (ok) {
+            await doCreateTrelloCard(true);
+          }
+        }
+        if (data.card_url) {
+          // No new tab. Just copy link (best-effort) so VA can paste if needed.
+          try { await navigator.clipboard.writeText(data.card_url); } catch (_) {}
+        }
+        if (data.voiceover_uploaded === false && data.voiceover_upload_error) {
+          apiErrorEl.textContent = data.voiceover_upload_error;
+          apiErrorEl.style.display = 'block';
+        }
+      } catch (e) {
+        apiErrorEl.textContent = (e && e.message) || 'Trello card request failed';
+        apiErrorEl.style.display = 'block';
+      } finally {
+        if (createTrelloBtn) {
+          createTrelloBtn.disabled = false;
+          createTrelloBtn.textContent = originalText;
+        }
+      }
+    }
+
+    const createTrelloBtn = document.getElementById('createTrelloBtn');
+    if (createTrelloBtn) {
+      createTrelloBtn.addEventListener('click', () => {
+        if (!lastResult || !currentVideoUrl) {
+          apiErrorEl.textContent = 'Process a video first before creating a Trello card.';
+          apiErrorEl.style.display = 'block';
+          return;
+        }
+        openTrelloModal();
+      });
+    }
+
+    if (trelloModalCancel) {
+      trelloModalCancel.addEventListener('click', () => {
+        closeTrelloModal();
+      });
+    }
+
+    if (trelloModalConfirm) {
+      trelloModalConfirm.addEventListener('click', async () => {
+        trelloChannel = trelloChannelInput.value.trim();
+        trelloVideoNumber = trelloVideoNumberInput.value.trim();
+        saveTrelloPrefs();
+        closeTrelloModal();
+        await doCreateTrelloCard(false);
+      });
+    }
+
+    // Restore history from localStorage (6h TTL)
+    history = loadHistory();
+    loadSavedVoice();
+    loadTrelloPrefs();
+    applyVoiceSelection();
+    if (history.length > 0) {
+      lastResult = history[0].data;
+      activeHistoryId = history[0].id;
+      currentVideoUrl = history[0].url || '';
+      renderCards(lastResult);
+      if (!restoreVoiceoverForId(activeHistoryId)) setVoiceoverState('empty');
+    } else {
+      setVoiceoverState('empty');
+    }
+    renderHistory();
+  </script>
+</body>
+</html>
