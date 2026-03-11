@@ -214,6 +214,20 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-backdrop" id="trelloConfirmBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="trelloConfirmTitle">
+      <h2 id="trelloConfirmTitle">Folder already exists</h2>
+      <p id="trelloConfirmMessage" style="font-size:0.85rem;color:var(--muted);margin-bottom:0.75rem;">
+        A folder for this channel, date and video number already exists.
+        Do you want to create an additional folder with (1)?
+      </p>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="trelloConfirmCancel">Cancel</button>
+        <button type="button" class="btn btn-primary btn-small" id="trelloConfirmOk">Create extra folder</button>
+      </div>
+    </div>
+  </div>
   <script>
     const BACKEND_URL = (!window.location.hostname || /localhost|127\.0\.0\.1/.test(window.location.hostname))
       ? 'http://localhost:8001'
@@ -700,6 +714,9 @@
     const trelloVideoNumberInput = document.getElementById('trelloVideoNumber');
     const trelloModalCancel = document.getElementById('trelloModalCancel');
     const trelloModalConfirm = document.getElementById('trelloModalConfirm');
+    const trelloConfirmBackdrop = document.getElementById('trelloConfirmBackdrop');
+    const trelloConfirmCancel = document.getElementById('trelloConfirmCancel');
+    const trelloConfirmOk = document.getElementById('trelloConfirmOk');
 
     function openTrelloModal() {
       if (!trelloModalBackdrop) return;
@@ -713,20 +730,50 @@
       trelloModalBackdrop.classList.remove('open');
     }
 
+    function openTrelloConfirm() {
+      if (!trelloConfirmBackdrop) return;
+      trelloConfirmBackdrop.classList.add('open');
+    }
+
+    function closeTrelloConfirm() {
+      if (!trelloConfirmBackdrop) return;
+      trelloConfirmBackdrop.classList.remove('open');
+    }
+
+    function askTrelloConfirm() {
+      return new Promise((resolve) => {
+        if (!trelloConfirmBackdrop || !trelloConfirmOk || !trelloConfirmCancel) {
+          resolve(false);
+          return;
+        }
+        function onOk() {
+          trelloConfirmOk.removeEventListener('click', onOk);
+          trelloConfirmCancel.removeEventListener('click', onCancel);
+          closeTrelloConfirm();
+          resolve(true);
+        }
+        function onCancel() {
+          trelloConfirmOk.removeEventListener('click', onOk);
+          trelloConfirmCancel.removeEventListener('click', onCancel);
+          closeTrelloConfirm();
+          resolve(false);
+        }
+        trelloConfirmOk.addEventListener('click', onOk);
+        trelloConfirmCancel.addEventListener('click', onCancel);
+        openTrelloConfirm();
+      });
+    }
+
     async function doCreateTrelloCard(forceNewFolder) {
       if (!lastResult || !currentVideoUrl) {
         apiErrorEl.textContent = 'Process a video first before creating a Trello card.';
         apiErrorEl.style.display = 'block';
         return;
       }
-      const createTrelloBtn = document.getElementById('createTrelloBtn');
       apiErrorEl.style.display = 'none';
       apiErrorEl.textContent = '';
-      if (createTrelloBtn) {
-        createTrelloBtn.disabled = true;
-        var originalText = createTrelloBtn.textContent;
-        createTrelloBtn.textContent = 'Creating Trello card…';
-      }
+      const createTrelloBtn = document.getElementById('createTrelloBtn');
+      let originalText = createTrelloBtn ? createTrelloBtn.textContent : '';
       try {
         async function blobToBase64(blob) {
           return await new Promise((resolve, reject) => {
@@ -766,7 +813,7 @@
             return;
           }
           if (checkData.folder_existed) {
-            const ok = window.confirm('A folder for this channel, date and video number already exists.\nCreate an additional folder (1) anyway?');
+            const ok = await askTrelloConfirm();
             if (!ok) {
               return;
             }
@@ -775,6 +822,11 @@
         }
 
         // 2) Actual Trello card creation (only runs once).
+        if (createTrelloBtn) {
+          createTrelloBtn.disabled = true;
+          originalText = createTrelloBtn.textContent;
+          createTrelloBtn.textContent = 'Creating Trello card…';
+        }
         const payload = {
           video_url: currentVideoUrl,
           translated_title: lastResult.translated_title || '',
