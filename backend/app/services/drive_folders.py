@@ -1,5 +1,6 @@
 import os
 import io
+import json
 from datetime import datetime
 from typing import Optional, Tuple
 
@@ -17,14 +18,28 @@ _drive_service = None
 
 
 def _get_drive_service():
+    """
+    Prefer GOOGLE_SERVICE_ACCOUNT_JSON (full JSON in env) when present.
+    Fallback to GOOGLE_SERVICE_ACCOUNT_FILE path when JSON is not provided.
+    """
     global _drive_service
     if _drive_service is not None:
         return _drive_service
-    sa_path = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE") or "").strip()
-    if not sa_path:
-        raise DriveConfigError("GOOGLE_SERVICE_ACCOUNT_FILE is not set.")
+
     scopes = ["https://www.googleapis.com/auth/drive"]
-    creds = service_account.Credentials.from_service_account_file(sa_path, scopes=scopes)
+    json_str = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or "").strip()
+    if json_str:
+        try:
+            info = json.loads(json_str)
+        except Exception as e:
+            raise DriveConfigError(f"GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON: {e}")
+        creds = service_account.Credentials.from_service_account_info(info, scopes=scopes)
+    else:
+        sa_path = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE") or "").strip()
+        if not sa_path:
+            raise DriveConfigError("GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE must be set.")
+        creds = service_account.Credentials.from_service_account_file(sa_path, scopes=scopes)
+
     _drive_service = build("drive", "v3", credentials=creds)
     return _drive_service
 
