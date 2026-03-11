@@ -79,6 +79,33 @@ def _build_description(
     return "\n".join(lines)
 
 
+def check_voiceover_folder_exists(
+    *,
+    channel: Optional[str],
+    video_number: Optional[int],
+) -> bool:
+    """
+    Check whether a voiceover folder for (channel, current week/day, video_number) already existed.
+
+    This may create the folder when it doesn't exist yet, but returns True only if a folder
+    was present before this call.
+    """
+    today = datetime.utcnow().date()
+    week = today.isocalendar().week
+    day = today.day
+    try:
+        _, _, existed, _ = drive_folders.ensure_voiceover_folder(
+            channel=channel,
+            week=week,
+            day=day,
+            video_number=video_number,
+            force_new=False,
+        )
+        return existed
+    except Exception:
+        return False
+
+
 def create_card_from_template(
     *,
     video_url: str,

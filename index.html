@@ -741,6 +741,40 @@
           });
         }
 
+        // 1) Optional dry-run to check if folder already exists (no Trello card created yet).
+        if (!forceNewFolder) {
+          const checkPayload = {
+            video_url: currentVideoUrl,
+            translated_title: lastResult.translated_title || '',
+            sentence_match: lastResult.sentence_match || '',
+            credits: lastResult.credits || '',
+            source: lastResult.source || lastResult.credits || '',
+            channel: trelloChannel || '',
+            video_number: trelloVideoNumber ? Number(trelloVideoNumber) : null,
+            force_new_folder: false,
+            dry_run: true,
+          };
+          const checkRes = await fetch(`${BACKEND_URL}/api/trello/create-card`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(checkPayload),
+          });
+          const checkData = await checkRes.json().catch(() => ({}));
+          if (!checkRes.ok) {
+            apiErrorEl.textContent = checkData.detail || checkRes.statusText || 'Trello folder check failed';
+            apiErrorEl.style.display = 'block';
+            return;
+          }
+          if (checkData.folder_existed) {
+            const ok = window.confirm('A folder for this channel, date and video number already exists.\nCreate an additional folder (1) anyway?');
+            if (!ok) {
+              return;
+            }
+            forceNewFolder = true;
+          }
+        }
+
+        // 2) Actual Trello card creation (only runs once).
         const payload = {
           video_url: currentVideoUrl,
           translated_title: lastResult.translated_title || '',
@@ -765,12 +799,6 @@
           apiErrorEl.textContent = data.detail || res.statusText || 'Trello card creation failed';
           apiErrorEl.style.display = 'block';
           return;
-        }
-        if (data.folder_existed && !forceNewFolder) {
-          const ok = window.confirm('A folder for this channel, date and video number already exists.\nCreate an additional folder (1) anyway?');
-          if (ok) {
-            await doCreateTrelloCard(true);
-          }
         }
         if (data.card_url) {
           // No new tab. Just copy link (best-effort) so VA can paste if needed.

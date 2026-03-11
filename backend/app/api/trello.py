@@ -21,6 +21,7 @@ class TrelloCreateRequest(BaseModel):
     channel: Optional[str] = None
     video_number: Optional[int] = None
     force_new_folder: bool = False
+    dry_run: bool = False
     voiceover_mp3_base64: Optional[str] = None  # base64 payload without data: prefix
     voiceover_filename: Optional[str] = None
 
@@ -47,6 +48,20 @@ def create_trello_card(body: TrelloCreateRequest):
                 voiceover_bytes = base64.b64decode(body.voiceover_mp3_base64.strip(), validate=True)
             except Exception:
                 raise HTTPException(status_code=400, detail="Invalid voiceover_mp3_base64 (must be base64).")
+
+        # Dry-run mode: only check whether the folder already existed, do NOT create a Trello card.
+        if body.dry_run:
+            existed = trello_service.check_voiceover_folder_exists(
+                channel=body.channel,
+                video_number=body.video_number,
+            )
+            return TrelloCreateResponse(
+                card_url="",
+                folder_existed=existed,
+                voiceover_uploaded=False,
+                voiceover_upload_error=None,
+            )
+
         card_url, folder_existed, voiceover_uploaded, voiceover_upload_error = trello_service.create_card_from_template(
             video_url=str(body.video_url),
             source=body.source,
