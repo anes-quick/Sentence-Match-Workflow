@@ -9,7 +9,7 @@
     :root { --bg:#0f0f10; --surface:#18181b; --text:#fafafa; --muted:#71717a; --accent:#e8ff47; --border:#27272a; --error:#f87171; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-    header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+    header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
     .main-title-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
     .main-title-row h1 { margin: 0; }
     .header-voice-wrap { position: relative; }
@@ -102,11 +102,16 @@
     .btn-ghost { padding: 0.45rem 0.8rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 0.85rem; cursor: pointer; }
     .btn-ghost:hover { border-color: var(--muted); color: var(--text); }
     .btn-small { padding: 0.45rem 0.9rem; font-size: 0.85rem; }
+    .home-link { display: inline-flex; align-items: center; justify-content: center; }
+    .home-link img { width: 46px; height: 46px; display: block; }
   </style>
 </head>
 <body>
   <header>
     <span>Sentence Match Workflow</span>
+    <a href="https://tool-hub-virid.vercel.app/" class="home-link" aria-label="Back to tool hub">
+      <img src="/home-logo.png" alt="Tool hub home" />
+    </a>
   </header>
   <div class="layout">
     <main class="main">
