@@ -154,10 +154,7 @@
         <div class="card voiceover-card" id="voiceoverCard">
           <div class="card-header">
             <span class="card-title">Voice-over</span>
-            <div style="display:flex; gap:0.5rem; align-items:center;">
-              <button type="button" class="btn btn-copy" id="voiceoverRegenBtn" title="Regenerate voice-over">Regenerate</button>
-              <button type="button" class="btn btn-copy" id="voiceoverDownloadBtn" title="Download MP3">Download</button>
-            </div>
+            <button type="button" class="btn btn-copy" id="voiceoverDownloadBtn" title="Download MP3">Download</button>
           </div>
           <div class="card-content voiceover-content">
             <audio id="voiceoverAudio" preload="metadata"></audio>
@@ -209,6 +206,7 @@
           <option value="3">3</option>
           <option value="4">4</option>
           <option value="5">5</option>
+          <option value="6">6</option>
         </select>
       </div>
       <div class="modal-actions">
@@ -664,7 +662,6 @@
     const voiceoverSeek = document.getElementById('voiceoverSeek');
     const voiceoverTime = document.getElementById('voiceoverTime');
     const voiceoverDownloadBtn = document.getElementById('voiceoverDownloadBtn');
-    const voiceoverRegenBtn = document.getElementById('voiceoverRegenBtn');
 
     voiceoverPlayBtn.addEventListener('click', () => {
       if (!voiceoverAudio.src) return;
@@ -712,19 +709,6 @@
       a.click();
       URL.revokeObjectURL(url);
     });
-
-    if (voiceoverRegenBtn) {
-      voiceoverRegenBtn.addEventListener('click', () => {
-        if (!lastResult || !(lastResult.tts_text || '').trim()) {
-          apiErrorEl.textContent = 'No TTS text available to regenerate.';
-          apiErrorEl.style.display = 'block';
-          return;
-        }
-        apiErrorEl.style.display = 'none';
-        apiErrorEl.textContent = '';
-        fetchAndShowVoiceover(lastResult.tts_text);
-      });
-    }
 
     const trelloModalBackdrop = document.getElementById('trelloModalBackdrop');
     const trelloChannelInput = document.getElementById('trelloChannel');
