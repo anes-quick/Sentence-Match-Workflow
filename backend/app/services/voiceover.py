@@ -82,6 +82,18 @@ def _set_fallback_window() -> None:
         logger.warning("Could not write fallback window file: %s", e)
 
 
+def _in_managed_env() -> bool:
+    """
+    Heuristic: True when running in a hosted environment like Railway.
+    We prefer a simpler, more robust voice-over path there (ElevenLabs only).
+    """
+    return bool(
+        os.environ.get("RAILWAY_ENVIRONMENT")
+        or os.environ.get("RAILWAY_PROJECT_ID")
+        or os.environ.get("RAILWAY_SERVICE_NAME")
+    )
+
+
 def _generate_voiceover_elevenlabs(tts_text: str, voice_id_override: str = None) -> bytes:
     """ElevenLabs direct TTS — synchronous, returns MP3 bytes. Used as fallback when ai33 is slow/fails."""
     api_key = (os.environ.get("ELEVENLABS_API_KEY") or "").strip()
@@ -148,9 +160,17 @@ def generate_voiceover(tts_text: str, voice_id: str = None, voice_key: str = Non
         ai33_id = vid
     if not el_id:
         el_id = vid
-    if _use_elevenlabs_only():
-        logger.info("Voice-over: within 3h fallback window, using ElevenLabs directly.")
+
+    # In managed environments (Railway) or when explicitly configured, prefer a
+    # simpler and more robust path: ElevenLabs only.
+    force_elevenlabs_only = (
+        os.environ.get("VOICEOVER_ELEVENLABS_ONLY") == "1" or _in_managed_env()
+    )
+
+    if force_elevenlabs_only or _use_elevenlabs_only():
+        logger.info("Voice-over: using ElevenLabs-only mode (managed env or 3h fallback window).")
         return _generate_voiceover_elevenlabs(clean_text, voice_id_override=el_id or None)
+
     try:
         return _generate_voiceover_ai33(clean_text, voice_id_override=ai33_id or None)
     except (TimeoutError, Exception) as e:
