@@ -37,6 +37,42 @@ class TrelloCreateResponse(BaseModel):
     voiceover_upload_error: Optional[str] = None
 
 
+@router.get("/debug-source")
+def debug_source(video_url: str) -> dict:
+    """
+    Debug source ID resolution without creating a card.
+    Returns video_id, channel_id, channel_key, source_id, and any error.
+    Example: GET /api/trello/debug-source?video_url=https://youtube.com/shorts/10-MmXMN1pg
+    """
+    result: dict = {
+        "video_url": video_url,
+        "video_id": None,
+        "channel_id": None,
+        "channel_key": None,
+        "source_id": None,
+        "sources_configured": sources_sheet_service.is_configured(),
+        "error": None,
+    }
+    try:
+        vid = extract_video_id(video_url)
+        result["video_id"] = vid
+        if not vid:
+            result["error"] = "Could not extract video_id from URL"
+            return result
+        channel_id = youtube_channel_service.get_channel_id_from_video(vid)
+        result["channel_id"] = channel_id
+        result["channel_key"] = channel_id if channel_id else video_url
+        if not result["sources_configured"]:
+            result["error"] = "SOURCES_SHEET_ID is not set"
+            return result
+        result["source_id"] = sources_sheet_service.get_or_create_source(result["channel_key"])
+    except sources_sheet_service.SourcesSheetError as e:
+        result["error"] = str(e)
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+
 @router.post("/create-card", response_model=TrelloCreateResponse)
 def create_trello_card(body: TrelloCreateRequest):
     """
@@ -55,15 +91,22 @@ def create_trello_card(body: TrelloCreateRequest):
 
         # Resolve source_id from Sources sheet: one ID per channel (key by channel ID, fallback video URL).
         source_id: Optional[str] = body.source_id
-        if source_id is None and sources_sheet_service.is_configured():
+        sources_configured = sources_sheet_service.is_configured()
+        logger.info("Trello create-card: sources_configured=%s, body.source_id=%s", sources_configured, body.source_id)
+        if source_id is None and sources_configured:
             try:
                 video_id = extract_video_id(str(body.video_url))
                 channel_id = youtube_channel_service.get_channel_id_from_video(video_id) if video_id else None
                 channel_key = channel_id if channel_id else str(body.video_url)
+                logger.info("Trello create-card: video_id=%s, channel_id=%s, channel_key=%s", video_id, channel_id, channel_key[:80] if channel_key else None)
                 source_id = sources_sheet_service.get_or_create_source(channel_key)
+                logger.info("Trello create-card: source_id=%s", source_id)
             except sources_sheet_service.SourcesSheetError as e:
                 logger.warning("Sources sheet lookup failed (card will have no source_id): %s", e)
                 source_id = None
+        else:
+            if not sources_configured:
+                logger.info("Trello create-card: SOURCES_SHEET_ID not set, skipping source_id")
 
         # Dry-run mode: only check whether the folder already existed, do NOT create a Trello card.
         if body.dry_run:

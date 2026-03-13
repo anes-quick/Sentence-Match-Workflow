@@ -1,9 +1,10 @@
 import re
 from typing import Optional
 
-# YouTube URL patterns: watch?v=ID, shorts/ID, embed/ID, youtu.be/ID
+# YouTube URL patterns: watch?v=ID, shorts/ID, embed/ID, youtu.be/ID (case-insensitive, optional www.)
 YOUTUBE_ID_PATTERN = re.compile(
-    r"(?:youtube\.com/(?:watch\?v=|shorts/|embed/)|youtu\.be/)([a-zA-Z0-9_-]{11})"
+    r"(?:(?:www\.)?youtube\.com/(?:watch\?v=|shorts/|embed/)|youtu\.be/)([a-zA-Z0-9_-]{11})",
+    re.IGNORECASE,
 )
 
 
