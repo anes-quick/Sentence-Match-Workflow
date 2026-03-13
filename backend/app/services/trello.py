@@ -43,6 +43,7 @@ def _build_description(
     title: str,
     credits: Optional[str],
     sentence_match: str,
+    source_id: Optional[str] = None,
 ) -> str:
     """
     Build the Trello card description in the agreed format.
@@ -51,6 +52,7 @@ def _build_description(
     Source - <source>          (uploader / channel of inspo video)
     title - <German title>
     cr - <credits string>
+    [ SRC0001 ]                (source id in brackets; only if provided)
     sentence match -
     ```trello
     ...
@@ -70,12 +72,18 @@ def _build_description(
         "",
         f"cr - {cr or ''}",
         "",
+    ]
+    # Source ID right below credits, in brackets (discreet; parseable as SRC + digits).
+    if source_id and (sid := str(source_id).strip()).upper().startswith("SRC"):
+        lines.append(f"[ {sid} ]")
+        lines.append("")
+    lines.extend([
         "sentence match -",
         "```trello",
         (sentence_match or "").strip(),
         "```",
         "",
-    ]
+    ])
     return "\n".join(lines)
 
 
@@ -113,6 +121,7 @@ def create_card_from_template(
     title: str,
     credits: Optional[str],
     sentence_match: str,
+    source_id: Optional[str] = None,
     channel: Optional[str] = None,
     video_number: Optional[int] = None,
     force_new_folder: bool = False,
@@ -210,6 +219,7 @@ def create_card_from_template(
             title=title,
             credits=credits,
             sentence_match=sentence_match,
+            source_id=source_id,
         )
 
         create_params = {

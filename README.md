@@ -50,6 +50,16 @@ Open `index.html` in a browser, or serve it (e.g. with Vercel or any static host
   - `utils/credits.py` — credits from description
   - `prompts/` — system prompt and German style examples (edit these to tune output)
 
+### Optional: Trello + Drive + Sources sheet
+
+- **Trello:** Set `TRELLO_API_KEY`, `TRELLO_TOKEN`, `TRELLO_BOARD_ID`, `TRELLO_TEMPLATE_CARD_ID` to enable "Create Trello card".
+- **Drive:** Set `GOOGLE_SERVICE_ACCOUNT_JSON` (or `GOOGLE_SERVICE_ACCOUNT_FILE`) and `DRIVE_ROOT_FOLDER_ID` for folder creation and voice-over upload. Same Google Cloud project as below.
+- **Sources sheet (source IDs on cards):** No extra API keys. Use the **same Google service account** as Drive. Enable the **Google Sheets API** in your [Google Cloud Console](https://console.cloud.google.com/apis/library/sheets.googleapis.com) for that project. Then:
+  1. Create a new Google Sheet (or use an existing one).
+  2. Share the sheet with the **service account email** (from your JSON key, field `client_email`) with **Editor** permission.
+  3. Set `SOURCES_SHEET_ID` to the sheet ID from the URL: `https://docs.google.com/spreadsheets/d/<SOURCES_SHEET_ID>/edit`.  
+  When creating a Trello card, the backend will look up or create a row keyed by video URL and put the ID on the card as `[ SRC0001 ]` (and so on). Optional: set `SOURCES_SHEET_TAB` if your tab is not the default (e.g. `Sheet1`).
+
 ## Deploy
 
 - **Frontend:** e.g. Vercel (static) — set `BACKEND_URL` to your backend URL.

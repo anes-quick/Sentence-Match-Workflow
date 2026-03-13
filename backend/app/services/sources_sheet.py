@@ -1,0 +1,160 @@
+"""
+Sources sheet: map source video URL (or channel) to a stable ID (SRC0001, SRC0002, ...).
+Uses the same Google service account as Drive; requires Sheets API scope and SOURCES_SHEET_ID.
+"""
+import json
+import os
+import re
+from typing import Optional
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+
+class SourcesSheetError(RuntimeError):
+    pass
+
+
+_sheets_service = None
+
+# Sheet layout: A = source_key (normalized URL), B = source_id (SRC0001, ...). Row 1 = optional headers.
+def _sheet_name() -> str:
+    return (os.environ.get("SOURCES_SHEET_TAB") or "").strip() or "Sheet1"
+_KEY_COL = "A"
+_ID_COL = "B"
+
+
+def _get_sheets_service():
+    """Use same credential env as Drive, with spreadsheets scope."""
+    global _sheets_service
+    if _sheets_service is not None:
+        return _sheets_service
+
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    json_str = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or "").strip()
+    if json_str:
+        try:
+            info = json.loads(json_str)
+        except Exception as e:
+            raise SourcesSheetError(f"GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON: {e}")
+        creds = service_account.Credentials.from_service_account_info(info, scopes=scopes)
+    else:
+        sa_path = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE") or "").strip()
+        if not sa_path:
+            raise SourcesSheetError(
+                "SOURCES_SHEET_ID is set but GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE is not set."
+            )
+        creds = service_account.Credentials.from_service_account_file(sa_path, scopes=scopes)
+
+    _sheets_service = build("sheets", "v4", credentials=creds)
+    return _sheets_service
+
+
+def _get_sheet_id() -> str:
+    sid = (os.environ.get("SOURCES_SHEET_ID") or "").strip()
+    if not sid:
+        raise SourcesSheetError("SOURCES_SHEET_ID is not set.")
+    return sid
+
+
+def _normalize_video_url(url: str) -> str:
+    """Canonical form for lookup: strip whitespace, lowercase, no trailing slash."""
+    u = (url or "").strip().lower()
+    if u.endswith("/"):
+        u = u[:-1]
+    return u
+
+
+def _next_source_id(existing_ids: list[str]) -> str:
+    """Return next SRC number, e.g. SRC0001, SRC0002, ... (4-digit zero-padded)."""
+    max_n = 0
+    pattern = re.compile(r"^SRC(\d+)$", re.IGNORECASE)
+    for sid in existing_ids:
+        if not isinstance(sid, str):
+            continue
+        m = pattern.match(sid.strip())
+        if m:
+            max_n = max(max_n, int(m.group(1)))
+    return f"SRC{max_n + 1:04d}"
+
+
+def get_or_create_source(source_video_url: str) -> str:
+    """
+    Look up or create a source ID for the given video URL.
+    Keys by normalized video URL. Returns e.g. SRC0001, SRC0002.
+    """
+    sheet_id = _get_sheet_id()
+    key = _normalize_video_url(source_video_url)
+    if not key:
+        raise SourcesSheetError("source_video_url is empty after normalizing.")
+
+    service = _get_sheets_service()
+    range_ = f"{_sheet_name()}!{_KEY_COL}:{_ID_COL}"
+
+    try:
+        result = service.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range=range_,
+        ).execute()
+        rows = result.get("values") or []
+    except HttpError as e:
+        msg = (e.content or str(e)).decode("utf-8") if hasattr(e, "content") and e.content else str(e)
+        if "404" in msg or "not found" in msg.lower():
+            raise SourcesSheetError(
+                f"Sources sheet not found. Create a Google Sheet, share it with the service account (Editor), "
+                f"and set SOURCES_SHEET_ID to the sheet ID from the URL. Details: {msg}"
+            )
+        if "403" in msg or "permission" in msg.lower():
+            raise SourcesSheetError(
+                "No permission to read Sources sheet. Share the sheet with the service account email (Editor)."
+            )
+        raise SourcesSheetError(f"Sources sheet error: {msg}")
+
+    # First row may be headers
+    if rows and rows[0] and (rows[0][0] or "").strip().lower() == "source_key":
+        data_rows = rows[1:]
+    else:
+        data_rows = rows
+
+    existing_ids = []
+    for row in data_rows:
+        if len(row) < 2:
+            continue
+        row_key = (row[0] or "").strip()
+        row_id = (row[1] or "").strip()
+        if row_key == key:
+            if row_id.upper().startswith("SRC"):
+                return row_id
+            # malformed id; treat as new and assign next
+            break
+        if row_id:
+            existing_ids.append(row_id)
+
+    # Not found: append new row
+    new_id = _next_source_id(existing_ids)
+    append_range = f"{_sheet_name()}!{_KEY_COL}:{_ID_COL}"
+    body = {"values": [[key, new_id]]}
+
+    try:
+        service.spreadsheets().values().append(
+            spreadsheetId=sheet_id,
+            range=append_range,
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body=body,
+        ).execute()
+    except HttpError as e:
+        msg = (e.content or str(e)).decode("utf-8") if hasattr(e, "content") and e.content else str(e)
+        if "403" in msg or "permission" in msg.lower():
+            raise SourcesSheetError(
+                "No permission to write to Sources sheet. Share the sheet with the service account email (Editor)."
+            )
+        raise SourcesSheetError(f"Sources sheet append error: {msg}")
+
+    return new_id
+
+
+def is_configured() -> bool:
+    """True if SOURCES_SHEET_ID is set (and we can try to use the sheet)."""
+    return bool((os.environ.get("SOURCES_SHEET_ID") or "").strip())

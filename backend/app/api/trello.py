@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, HttpUrl
 
 from app.services import trello as trello_service
+from app.services import sources_sheet as sources_sheet_service
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class TrelloCreateRequest(BaseModel):
     sentence_match: str
     credits: Optional[str] = None
     source: Optional[str] = None
+    source_id: Optional[str] = None  # e.g. SRC0001; shown as [ SRC0001 ] below credits
     channel: Optional[str] = None
     video_number: Optional[int] = None
     force_new_folder: bool = False
@@ -49,6 +51,15 @@ def create_trello_card(body: TrelloCreateRequest):
             except Exception:
                 raise HTTPException(status_code=400, detail="Invalid voiceover_mp3_base64 (must be base64).")
 
+        # Resolve source_id from Sources sheet when not provided (by video_url).
+        source_id: Optional[str] = body.source_id
+        if source_id is None and sources_sheet_service.is_configured():
+            try:
+                source_id = sources_sheet_service.get_or_create_source(str(body.video_url))
+            except sources_sheet_service.SourcesSheetError as e:
+                logger.warning("Sources sheet lookup failed (card will have no source_id): %s", e)
+                source_id = None
+
         # Dry-run mode: only check whether the folder already existed, do NOT create a Trello card.
         if body.dry_run:
             existed = trello_service.check_voiceover_folder_exists(
@@ -68,6 +79,7 @@ def create_trello_card(body: TrelloCreateRequest):
             title=body.translated_title,
             credits=body.credits,
             sentence_match=body.sentence_match,
+            source_id=source_id,
             channel=body.channel,
             video_number=body.video_number,
             force_new_folder=body.force_new_folder,
