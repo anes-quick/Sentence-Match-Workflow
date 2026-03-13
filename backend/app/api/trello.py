@@ -7,6 +7,8 @@ from pydantic import BaseModel, HttpUrl
 
 from app.services import trello as trello_service
 from app.services import sources_sheet as sources_sheet_service
+from app.services import youtube_channel as youtube_channel_service
+from app.utils.video import extract_video_id
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +53,14 @@ def create_trello_card(body: TrelloCreateRequest):
             except Exception:
                 raise HTTPException(status_code=400, detail="Invalid voiceover_mp3_base64 (must be base64).")
 
-        # Resolve source_id from Sources sheet when not provided (by video_url).
+        # Resolve source_id from Sources sheet: one ID per channel (key by channel ID, fallback video URL).
         source_id: Optional[str] = body.source_id
         if source_id is None and sources_sheet_service.is_configured():
             try:
-                source_id = sources_sheet_service.get_or_create_source(str(body.video_url))
+                video_id = extract_video_id(str(body.video_url))
+                channel_id = youtube_channel_service.get_channel_id_from_video(video_id) if video_id else None
+                channel_key = channel_id if channel_id else str(body.video_url)
+                source_id = sources_sheet_service.get_or_create_source(channel_key)
             except sources_sheet_service.SourcesSheetError as e:
                 logger.warning("Sources sheet lookup failed (card will have no source_id): %s", e)
                 source_id = None

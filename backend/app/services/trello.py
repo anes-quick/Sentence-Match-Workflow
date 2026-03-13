@@ -49,7 +49,6 @@ def _build_description(
     Build the Trello card description in the agreed format.
 
     link - <video_url>
-    Source - <source>          (uploader / channel of inspo video)
     title - <German title>
     cr - <credits string>
     [ SRC0001 ]                (source id in brackets; only if provided)
@@ -58,15 +57,9 @@ def _build_description(
     ...
     ```
     """
-    src = (source or "").strip()
     cr = (credits or "").strip()
-    # For now, if explicit source is empty, fall back to credits.
-    if not src and cr:
-        src = cr
     lines = [
         f"link - {video_url or ''}",
-        "",
-        f"Source - {src or ''}",
         "",
         f"title - {title or ''}",
         "",

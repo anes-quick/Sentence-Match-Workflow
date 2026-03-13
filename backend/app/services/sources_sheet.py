@@ -1,5 +1,5 @@
 """
-Sources sheet: map source video URL (or channel) to a stable ID (SRC0001, SRC0002, ...).
+Sources sheet: one SRC ID per channel. Key = channel ID (e.g. UC...) or fallback video URL.
 Uses the same Google service account as Drive; requires Sheets API scope and SOURCES_SHEET_ID.
 """
 import json
@@ -18,7 +18,7 @@ class SourcesSheetError(RuntimeError):
 
 _sheets_service = None
 
-# Sheet layout: A = source_key (normalized URL), B = source_id (SRC0001, ...). Row 1 = optional headers.
+# Sheet layout: A = channel_key (channel ID or video URL), B = source_id (SRC0001, ...). Row 1 = optional headers.
 def _sheet_name() -> str:
     return (os.environ.get("SOURCES_SHEET_TAB") or "").strip() or "Sheet1"
 _KEY_COL = "A"
@@ -58,12 +58,16 @@ def _get_sheet_id() -> str:
     return sid
 
 
-def _normalize_video_url(url: str) -> str:
-    """Canonical form for lookup: strip whitespace, lowercase, no trailing slash."""
-    u = (url or "").strip().lower()
-    if u.endswith("/"):
-        u = u[:-1]
-    return u
+def _normalize_channel_key(key: str) -> str:
+    """Canonical form for lookup: strip whitespace. For URLs also lowercase and no trailing slash."""
+    k = (key or "").strip()
+    if not k:
+        return k
+    if "youtube.com" in k.lower() or "youtu.be" in k.lower():
+        k = k.lower()
+        if k.endswith("/"):
+            k = k[:-1]
+    return k
 
 
 def _next_source_id(existing_ids: list[str]) -> str:
@@ -79,15 +83,17 @@ def _next_source_id(existing_ids: list[str]) -> str:
     return f"SRC{max_n + 1:04d}"
 
 
-def get_or_create_source(source_video_url: str) -> str:
+def get_or_create_source(channel_key: str) -> str:
     """
-    Look up or create a source ID for the given video URL.
-    Keys by normalized video URL. Returns e.g. SRC0001, SRC0002.
+    Look up or create a source ID for the given channel key.
+    channel_key should be YouTube channel ID (e.g. UC...) so one ID per channel;
+    if only video URL is available, it is used as key (one ID per video in that case).
+    Returns e.g. SRC0001, SRC0002.
     """
     sheet_id = _get_sheet_id()
-    key = _normalize_video_url(source_video_url)
+    key = _normalize_channel_key(channel_key)
     if not key:
-        raise SourcesSheetError("source_video_url is empty after normalizing.")
+        raise SourcesSheetError("channel_key is empty after normalizing.")
 
     service = _get_sheets_service()
     range_ = f"{_sheet_name()}!{_KEY_COL}:{_ID_COL}"
