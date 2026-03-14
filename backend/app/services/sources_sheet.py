@@ -21,11 +21,13 @@ class SourcesSheetError(RuntimeError):
 
 _sheets_service = None
 
-# Sheet layout: A = channel_key (channel ID or video URL), B = source_id (SRC0001, ...). Row 1 = optional headers.
+# Sheet layout: Row 5 = headers (B5=Channel, C5=Channel ID, D5=Tracking ID, E5=link).
+# Workflow fills only C = Channel ID, D = Tracking ID (SRC0001, ...). Data from row 6.
 def _sheet_name() -> str:
     return (os.environ.get("SOURCES_SHEET_TAB") or "").strip() or "sheet"
-_KEY_COL = "A"
-_ID_COL = "B"
+_HEADER_ROW = 5  # 1-based; row 5 has headers
+_CHANNEL_ID_COL = "C"   # Channel ID (YouTube channel ID or video URL)
+_TRACKING_ID_COL = "D"  # Tracking ID (SRC0001, ...)
 
 
 def get_service_account_email() -> Optional[str]:
@@ -122,7 +124,8 @@ def get_or_create_source(channel_key: str) -> str:
         raise SourcesSheetError("channel_key is empty after normalizing.")
 
     service = _get_sheets_service()
-    range_ = f"{_sheet_name()}!{_KEY_COL}:{_ID_COL}"
+    # Read from header row: C5:D (Channel ID col C, Tracking ID col D)
+    range_ = f"{_sheet_name()}!{_CHANNEL_ID_COL}{_HEADER_ROW}:{_TRACKING_ID_COL}"
 
     try:
         result = service.spreadsheets().values().get(
@@ -146,29 +149,32 @@ def get_or_create_source(channel_key: str) -> str:
             )
         raise SourcesSheetError(f"Sources sheet error: {msg}")
 
-    # First row may be headers
-    if rows and rows[0] and (rows[0][0] or "").strip().lower() == "source_key":
-        data_rows = rows[1:]
+    # Row 0 = headers (Channel ID, Tracking ID); data from row 1 onwards
+    if rows and len(rows) > 0:
+        first = (rows[0][0] or "").strip().lower() if rows[0] else ""
+        if "channel" in first and "id" in first or (len(rows[0]) > 1 and "tracking" in (rows[0][1] or "").strip().lower()):
+            data_rows = rows[1:]
+        else:
+            data_rows = rows
     else:
-        data_rows = rows
+        data_rows = []
 
     existing_ids = []
     for row in data_rows:
         if len(row) < 2:
             continue
-        row_key = (row[0] or "").strip()
-        row_id = (row[1] or "").strip()
-        if row_key == key:
-            if row_id.upper().startswith("SRC"):
-                return row_id
-            # malformed id; treat as new and assign next
+        row_channel_id = (row[0] or "").strip()
+        row_tracking_id = (row[1] or "").strip()
+        if row_channel_id == key:
+            if row_tracking_id.upper().startswith("SRC"):
+                return row_tracking_id
             break
-        if row_id:
-            existing_ids.append(row_id)
+        if row_tracking_id:
+            existing_ids.append(row_tracking_id)
 
-    # Not found: append new row
+    # Not found: append new row (Channel ID in C, Tracking ID in D)
     new_id = _next_source_id(existing_ids)
-    append_range = f"{_sheet_name()}!{_KEY_COL}:{_ID_COL}"
+    append_range = f"{_sheet_name()}!{_CHANNEL_ID_COL}:{_TRACKING_ID_COL}"
     body = {"values": [[key, new_id]]}
 
     try:
@@ -199,15 +205,14 @@ def is_configured() -> bool:
 def test_write_to_sheet() -> str:
     """
     Append one test row to the sheet to verify write access.
-    Row: A = "TEST_WRITE", B = "ok_<timestamp>_<random>".
-    Returns a success message; raises SourcesSheetError on failure.
+    Writes to Channel ID (C) and Tracking ID (D): TEST_CHANNEL | ok_<timestamp>_<random>.
     You can delete the test row from the sheet after.
     """
     sheet_id = _get_sheet_id()
     service = _get_sheets_service()
-    value_b = f"ok_{int(time.time())}_{''.join(random.choices(string.ascii_lowercase, k=6))}"
-    append_range = f"{_sheet_name()}!{_KEY_COL}:{_ID_COL}"
-    body = {"values": [["TEST_WRITE", value_b]]}
+    value_d = f"ok_{int(time.time())}_{''.join(random.choices(string.ascii_lowercase, k=6))}"
+    append_range = f"{_sheet_name()}!{_CHANNEL_ID_COL}:{_TRACKING_ID_COL}"
+    body = {"values": [["TEST_CHANNEL", value_d]]}
     try:
         service.spreadsheets().values().append(
             spreadsheetId=sheet_id,
@@ -216,7 +221,7 @@ def test_write_to_sheet() -> str:
             insertDataOption="INSERT_ROWS",
             body=body,
         ).execute()
-        return f"Wrote test row: TEST_WRITE | {value_b}"
+        return f"Wrote test row (Channel ID | Tracking ID): TEST_CHANNEL | {value_d}"
     except HttpError as e:
         msg = (e.content or str(e)).decode("utf-8") if hasattr(e, "content") and e.content else str(e)
         if "403" in msg or "permission" in msg.lower():

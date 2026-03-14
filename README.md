@@ -58,6 +58,7 @@ Open `index.html` in a browser, or serve it (e.g. with Vercel or any static host
   1. Create a new Google Sheet (or use an existing one).
   2. Share the sheet with the **service account email** (from your JSON key, field `client_email`) with **Editor** permission.
   3. Set `SOURCES_SHEET_ID` to the sheet ID from the URL: `https://docs.google.com/spreadsheets/d/<SOURCES_SHEET_ID>/edit`.  
+  **Sheet layout:** Row 5 = headers (e.g. B5=Channel, C5=Channel ID, D5=Tracking ID, E5=link). The workflow fills only **column C (Channel ID)** and **column D (Tracking ID)**; data starts at row 6. You can use columns B and E for your own data (Channel name, link).  
   When creating a Trello card, the backend looks up or creates a row keyed by **YouTube channel ID** (so all videos from the same channel get the same `[ SRC0001 ]`). Set **`YOUTUBE_API_KEY`** (YouTube Data API v3, same Google Cloud project) so the backend can resolve video → channel. Without it, the sheet is keyed by video URL (one ID per video). Optional: set `SOURCES_SHEET_TAB` if your tab is not the default (default: `sheet`).
 
 ## Deploy
