@@ -126,26 +126,7 @@ def create_trello_card(body: TrelloCreateRequest):
             except Exception:
                 raise HTTPException(status_code=400, detail="Invalid voiceover_mp3_base64 (must be base64).")
 
-        # Resolve source_id from Sources sheet: one ID per channel (key by channel ID, fallback video URL).
-        source_id: Optional[str] = body.source_id
-        sources_configured = sources_sheet_service.is_configured()
-        logger.info("Trello create-card: sources_configured=%s, body.source_id=%s", sources_configured, body.source_id)
-        if source_id is None and sources_configured:
-            try:
-                video_id = extract_video_id(str(body.video_url))
-                channel_id = youtube_channel_service.get_channel_id_from_video(video_id) if video_id else None
-                channel_key = channel_id if channel_id else str(body.video_url)
-                logger.info("Trello create-card: video_id=%s, channel_id=%s, channel_key=%s", video_id, channel_id, channel_key[:80] if channel_key else None)
-                source_id = sources_sheet_service.get_or_create_source(channel_key)
-                logger.info("Trello create-card: source_id=%s", source_id)
-            except sources_sheet_service.SourcesSheetError as e:
-                logger.warning("Sources sheet lookup failed (card will have no source_id): %s", e)
-                source_id = None
-        else:
-            if not sources_configured:
-                logger.warning("Trello create-card: SOURCES_SHEET_ID not set or empty in env — skipping source_id. Set it in Railway Variables and redeploy.")
-
-        # Dry-run mode: only check whether the folder already existed, do NOT create a Trello card.
+        # Dry-run mode: only check folder; do NOT hit Sources sheet or create a card.
         if body.dry_run:
             existed = trello_service.check_voiceover_folder_exists(
                 channel=body.channel,
@@ -157,6 +138,19 @@ def create_trello_card(body: TrelloCreateRequest):
                 voiceover_uploaded=False,
                 voiceover_upload_error=None,
             )
+
+        # Resolve source_id from Sources sheet only when actually creating the card (avoids duplicate sheet rows).
+        source_id: Optional[str] = body.source_id
+        sources_configured = sources_sheet_service.is_configured()
+        if source_id is None and sources_configured:
+            try:
+                video_id = extract_video_id(str(body.video_url))
+                channel_id = youtube_channel_service.get_channel_id_from_video(video_id) if video_id else None
+                channel_key = channel_id if channel_id else str(body.video_url)
+                source_id = sources_sheet_service.get_or_create_source(channel_key)
+            except sources_sheet_service.SourcesSheetError as e:
+                logger.warning("Sources sheet lookup failed (card will have no source_id): %s", e)
+                source_id = None
 
         card_url, folder_existed, voiceover_uploaded, voiceover_upload_error = trello_service.create_card_from_template(
             video_url=str(body.video_url),

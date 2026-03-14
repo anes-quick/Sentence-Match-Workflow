@@ -21,13 +21,14 @@ class SourcesSheetError(RuntimeError):
 
 _sheets_service = None
 
-# Sheet layout: Row 5 = headers (B5=Channel, C5=Channel ID, D5=Tracking ID, E5=link).
-# Workflow fills only C = Channel ID, D = Tracking ID (SRC0001, ...). Data from row 6.
+# Sheet layout: Row 5 = headers. B5=Channel, C5=Channel ID, D5=Tracking ID, E5=link.
+# Workflow fills only C (Channel ID) and D (Tracking ID). B and E left for you (scrape names, link).
 def _sheet_name() -> str:
     return (os.environ.get("SOURCES_SHEET_TAB") or "").strip() or "sheet"
 _HEADER_ROW = 5  # 1-based; row 5 has headers
-_CHANNEL_ID_COL = "C"   # Channel ID (YouTube channel ID or video URL)
-_TRACKING_ID_COL = "D"  # Tracking ID (SRC0001, ...)
+# B=Channel (empty), C=Channel ID, D=Tracking ID, E=link (empty). Indices 0..3 for B..E.
+_CHANNEL_ID_INDEX = 1   # C
+_TRACKING_ID_INDEX = 2  # D
 
 
 def get_service_account_email() -> Optional[str]:
@@ -124,8 +125,8 @@ def get_or_create_source(channel_key: str) -> str:
         raise SourcesSheetError("channel_key is empty after normalizing.")
 
     service = _get_sheets_service()
-    # Read from header row: C5:D (Channel ID col C, Tracking ID col D)
-    range_ = f"{_sheet_name()}!{_CHANNEL_ID_COL}{_HEADER_ROW}:{_TRACKING_ID_COL}"
+    # Read B5:E1000 (full data rows); columns C and D are indices 1 and 2
+    range_ = f"{_sheet_name()}!B{_HEADER_ROW}:E1000"
 
     try:
         result = service.spreadsheets().values().get(
@@ -149,33 +150,35 @@ def get_or_create_source(channel_key: str) -> str:
             )
         raise SourcesSheetError(f"Sources sheet error: {msg}")
 
-    # Row 0 = headers (Channel ID, Tracking ID); data from row 1 onwards
+    # Row 0 = headers (B=Channel, C=Channel ID, D=Tracking ID, E=link); data from row 1
+    ci, ti = _CHANNEL_ID_INDEX, _TRACKING_ID_INDEX
     if rows and len(rows) > 0:
-        first = (rows[0][0] or "").strip().lower() if rows[0] else ""
-        if "channel" in first and "id" in first or (len(rows[0]) > 1 and "tracking" in (rows[0][1] or "").strip().lower()):
-            data_rows = rows[1:]
-        else:
-            data_rows = rows
+        r0 = rows[0]
+        is_header = (
+            (len(r0) > ci and "channel" in (r0[ci] or "").strip().lower() and "id" in (r0[ci] or "").strip().lower())
+            or (len(r0) > ti and "tracking" in (r0[ti] or "").strip().lower())
+        )
+        data_rows = rows[1:] if is_header else rows
     else:
         data_rows = []
 
     existing_ids = []
     for row in data_rows:
-        if len(row) < 2:
+        if len(row) <= max(ci, ti):
             continue
-        row_channel_id = (row[0] or "").strip()
-        row_tracking_id = (row[1] or "").strip()
+        row_channel_id = (row[ci] or "").strip()
+        row_tracking_id = (row[ti] or "").strip()
         if row_channel_id == key:
             if row_tracking_id.upper().startswith("SRC"):
                 return row_tracking_id
             break
-        if row_tracking_id:
+        if row_tracking_id and row_tracking_id.upper().startswith("SRC"):
             existing_ids.append(row_tracking_id)
 
-    # Not found: append new row (Channel ID in C, Tracking ID in D)
+    # Not found: append one full row B–E (empty B, Channel ID in C, Tracking ID in D, empty E)
     new_id = _next_source_id(existing_ids)
-    append_range = f"{_sheet_name()}!{_CHANNEL_ID_COL}:{_TRACKING_ID_COL}"
-    body = {"values": [[key, new_id]]}
+    append_range = f"{_sheet_name()}!B:E"
+    body = {"values": [["", key, new_id, ""]]}
 
     try:
         service.spreadsheets().values().append(
@@ -204,15 +207,13 @@ def is_configured() -> bool:
 
 def test_write_to_sheet() -> str:
     """
-    Append one test row to the sheet to verify write access.
-    Writes to Channel ID (C) and Tracking ID (D): TEST_CHANNEL | ok_<timestamp>_<random>.
-    You can delete the test row from the sheet after.
+    Append one test row to the sheet (B=empty, C=TEST_CHANNEL, D=ok_..., E=empty). You can delete it after.
     """
     sheet_id = _get_sheet_id()
     service = _get_sheets_service()
     value_d = f"ok_{int(time.time())}_{''.join(random.choices(string.ascii_lowercase, k=6))}"
-    append_range = f"{_sheet_name()}!{_CHANNEL_ID_COL}:{_TRACKING_ID_COL}"
-    body = {"values": [["TEST_CHANNEL", value_d]]}
+    append_range = f"{_sheet_name()}!B:E"
+    body = {"values": [["", "TEST_CHANNEL", value_d, ""]]}
     try:
         service.spreadsheets().values().append(
             spreadsheetId=sheet_id,
