@@ -1,5 +1,6 @@
 import logging
 import base64
+import os
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -35,6 +36,23 @@ class TrelloCreateResponse(BaseModel):
     folder_existed: bool = False
     voiceover_uploaded: bool = False
     voiceover_upload_error: Optional[str] = None
+
+
+@router.get("/sources-status")
+def sources_status() -> dict:
+    """
+    Check if the app sees the Sources sheet config (no card created).
+    Use this to verify SOURCES_SHEET_ID and SOURCES_SHEET_TAB are set in Railway.
+    """
+    sheet_id_raw = (os.environ.get("SOURCES_SHEET_ID") or "").strip()
+    tab = (os.environ.get("SOURCES_SHEET_TAB") or "").strip() or "Sheet1"
+    return {
+        "sources_configured": bool(sheet_id_raw),
+        "sheet_id_set": bool(sheet_id_raw),
+        "sheet_id_preview": f"{sheet_id_raw[:8]}...{sheet_id_raw[-4:]}" if len(sheet_id_raw) > 12 else ("(set)" if sheet_id_raw else "(not set)"),
+        "sheet_tab": tab,
+        "service_account_email": sources_sheet_service.get_service_account_email(),
+    }
 
 
 @router.get("/debug-source")
@@ -107,7 +125,7 @@ def create_trello_card(body: TrelloCreateRequest):
                 source_id = None
         else:
             if not sources_configured:
-                logger.info("Trello create-card: SOURCES_SHEET_ID not set, skipping source_id")
+                logger.warning("Trello create-card: SOURCES_SHEET_ID not set or empty in env — skipping source_id. Set it in Railway Variables and redeploy.")
 
         # Dry-run mode: only check whether the folder already existed, do NOT create a Trello card.
         if body.dry_run:
