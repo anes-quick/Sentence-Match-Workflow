@@ -5,6 +5,9 @@ Uses the same Google service account as Drive; requires Sheets API scope and SOU
 import json
 import os
 import re
+import time
+import random
+import string
 from typing import Optional
 
 from google.oauth2 import service_account
@@ -191,3 +194,31 @@ def get_or_create_source(channel_key: str) -> str:
 def is_configured() -> bool:
     """True if SOURCES_SHEET_ID is set (and we can try to use the sheet)."""
     return bool((os.environ.get("SOURCES_SHEET_ID") or "").strip())
+
+
+def test_write_to_sheet() -> str:
+    """
+    Append one test row to the sheet to verify write access.
+    Row: A = "TEST_WRITE", B = "ok_<timestamp>_<random>".
+    Returns a success message; raises SourcesSheetError on failure.
+    You can delete the test row from the sheet after.
+    """
+    sheet_id = _get_sheet_id()
+    service = _get_sheets_service()
+    value_b = f"ok_{int(time.time())}_{''.join(random.choices(string.ascii_lowercase, k=6))}"
+    append_range = f"{_sheet_name()}!{_KEY_COL}:{_ID_COL}"
+    body = {"values": [["TEST_WRITE", value_b]]}
+    try:
+        service.spreadsheets().values().append(
+            spreadsheetId=sheet_id,
+            range=append_range,
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body=body,
+        ).execute()
+        return f"Wrote test row: TEST_WRITE | {value_b}"
+    except HttpError as e:
+        msg = (e.content or str(e)).decode("utf-8") if hasattr(e, "content") and e.content else str(e)
+        if "403" in msg or "permission" in msg.lower():
+            raise SourcesSheetError(f"No permission to write. Share the sheet with the service account (Editor). Raw: {msg[:200]}")
+        raise SourcesSheetError(f"Sheet write failed: {msg[:300]}")

@@ -38,6 +38,24 @@ class TrelloCreateResponse(BaseModel):
     voiceover_upload_error: Optional[str] = None
 
 
+@router.get("/test-sheet-write")
+def test_sheet_write() -> dict:
+    """
+    Write one test row (TEST_WRITE | ok_<timestamp>_<random>) to the Sources sheet.
+    Use this to verify the app can write to the sheet. You can delete the test row after.
+    """
+    result: dict = {"ok": False, "message": None, "error": None}
+    if not sources_sheet_service.is_configured():
+        result["error"] = "SOURCES_SHEET_ID is not set. Set it in Railway Variables and redeploy."
+        return result
+    try:
+        result["message"] = sources_sheet_service.test_write_to_sheet()
+        result["ok"] = True
+    except sources_sheet_service.SourcesSheetError as e:
+        result["error"] = str(e)
+    return result
+
+
 @router.get("/sources-status")
 def sources_status() -> dict:
     """
