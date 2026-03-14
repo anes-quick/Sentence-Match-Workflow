@@ -51,6 +51,7 @@ def debug_source(video_url: str) -> dict:
         "channel_key": None,
         "source_id": None,
         "sources_configured": sources_sheet_service.is_configured(),
+        "service_account_email": sources_sheet_service.get_service_account_email(),
         "error": None,
     }
     try:

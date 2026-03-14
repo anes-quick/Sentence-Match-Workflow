@@ -25,6 +25,29 @@ _KEY_COL = "A"
 _ID_COL = "B"
 
 
+def get_service_account_email() -> Optional[str]:
+    """
+    Return the service account email (client_email) used for Sheets/Drive.
+    Use this to verify the sheet is shared with the correct account.
+    """
+    json_str = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or "").strip()
+    if json_str:
+        try:
+            info = json.loads(json_str)
+            return (info.get("client_email") or "").strip() or None
+        except Exception:
+            return None
+    sa_path = (os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE") or "").strip()
+    if not sa_path:
+        return None
+    try:
+        with open(sa_path, "r") as f:
+            info = json.load(f)
+        return (info.get("client_email") or "").strip() or None
+    except Exception:
+        return None
+
+
 def _get_sheets_service():
     """Use same credential env as Drive, with spreadsheets scope."""
     global _sheets_service
@@ -111,9 +134,12 @@ def get_or_create_source(channel_key: str) -> str:
                 f"Sources sheet not found. Create a Google Sheet, share it with the service account (Editor), "
                 f"and set SOURCES_SHEET_ID to the sheet ID from the URL. Details: {msg}"
             )
-        if "403" in msg or "permission" in msg.lower():
+        if "403" in msg or "permission" in msg.lower() or "Access Not Configured" in msg or "has not been used" in msg:
+            hint = "Share the sheet with the service account email (Editor)."
+            if "Access Not Configured" in msg or "has not been used" in msg:
+                hint = "Enable 'Google Sheets API' in Google Cloud Console for this project (APIs & Services → Library → Google Sheets API)."
             raise SourcesSheetError(
-                "No permission to read Sources sheet. Share the sheet with the service account email (Editor)."
+                f"No permission to read Sources sheet (spreadsheetId={sheet_id}). {hint} Raw: {msg[:300]}"
             )
         raise SourcesSheetError(f"Sources sheet error: {msg}")
 
@@ -152,10 +178,11 @@ def get_or_create_source(channel_key: str) -> str:
         ).execute()
     except HttpError as e:
         msg = (e.content or str(e)).decode("utf-8") if hasattr(e, "content") and e.content else str(e)
-        if "403" in msg or "permission" in msg.lower():
-            raise SourcesSheetError(
-                "No permission to write to Sources sheet. Share the sheet with the service account email (Editor)."
-            )
+        if "403" in msg or "permission" in msg.lower() or "Access Not Configured" in msg:
+            hint = "Share the sheet with the service account email (Editor)."
+            if "Access Not Configured" in msg or "has not been used" in msg:
+                hint = "Enable 'Google Sheets API' in Google Cloud Console (APIs & Services → Library)."
+            raise SourcesSheetError(f"No permission to write to Sources sheet. {hint} Raw: {msg[:300]}")
         raise SourcesSheetError(f"Sources sheet append error: {msg}")
 
     return new_id
