@@ -63,7 +63,7 @@ def sources_status() -> dict:
     Use this to verify SOURCES_SHEET_ID and SOURCES_SHEET_TAB are set in Railway.
     """
     sheet_id_raw = (os.environ.get("SOURCES_SHEET_ID") or "").strip()
-    tab = (os.environ.get("SOURCES_SHEET_TAB") or "").strip() or "Sheet1"
+    tab = (os.environ.get("SOURCES_SHEET_TAB") or "").strip() or "sheet"
     return {
         "sources_configured": bool(sheet_id_raw),
         "sheet_id_set": bool(sheet_id_raw),

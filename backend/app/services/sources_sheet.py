@@ -23,7 +23,7 @@ _sheets_service = None
 
 # Sheet layout: A = channel_key (channel ID or video URL), B = source_id (SRC0001, ...). Row 1 = optional headers.
 def _sheet_name() -> str:
-    return (os.environ.get("SOURCES_SHEET_TAB") or "").strip() or "Sheet1"
+    return (os.environ.get("SOURCES_SHEET_TAB") or "").strip() or "sheet"
 _KEY_COL = "A"
 _ID_COL = "B"
 
