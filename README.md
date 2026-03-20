@@ -16,7 +16,10 @@ One input: YouTube video URL. Output: sentence match (EN/DE), TTS text, translat
 
 2. **Environment variables**
    Copy `backend/.env.example` to `backend/.env` and set:
-   - `FETCHTRANSCRIPT_API_KEY` — your [FetchTranscript.com](https://fetchtranscript.com) API key (starts with `yt_`)
+   - `TRANSCRIPTAPI_API_KEY` — your [TranscriptAPI.com](https://transcriptapi.com) API key (starts with `sk_`)
+   - `FETCHTRANSCRIPT_API_KEY` — optional fallback key for [FetchTranscript.com](https://fetchtranscript.com) (starts with `yt_`)
+   - `TRANSCRIPT_PROVIDER_PRIMARY` — `transcriptapi` or `fetchtranscript` (default: `transcriptapi`)
+   - `TRANSCRIPT_PROVIDER_FALLBACK` — `transcriptapi` or `fetchtranscript` (default: `fetchtranscript`)
    - `ANTHROPIC_API_KEY` — your Anthropic (Claude) API key
    - **Voice-over (optional):** `AI33_API_KEY`, `AI33_BASE_URL` (from ai33 API docs), `AI33_VOICE_ID` (default: Lars), `AI33_MODEL` (e.g. `eleven_multilingual_v3`)
 
@@ -43,7 +46,7 @@ Open `index.html` in a browser, or serve it (e.g. with Vercel or any static host
 - `backend/app/` — FastAPI app
   - `api/process.py` — `POST /api/process` (video_url → results)
   - `api/voiceover.py` — `POST /api/voiceover` (tts_text → MP3 download)
-  - `services/transcript.py` — FetchTranscript API client
+  - `services/transcript.py` — transcript provider client (TranscriptAPI + FetchTranscript fallback)
   - `services/voiceover.py` — ai33 TTS (ElevenLabs v3, voice Lars)
   - `services/translate.py` — Claude translation + response parsing
   - `utils/video.py` — YouTube video ID extraction
