@@ -31,10 +31,14 @@ GLOBAL LANGUAGE/CONTENT ADJUSTMENTS (MUST APPLY TO BOTH OUTPUTS):
 - CTAs are sentences that instruct or pressure the viewer to do something (or reference likes/subscribes/shares).
 - In OUTPUT 1 and OUTPUT 2: omit any CTA sentence entirely (do not replace it with another sentence).
 - Consider a sentence a CTA if it includes (or is clearly equivalent to) any of these ideas:
-  - "subscribe", "like(s)", "comment", "share", "follow"
+  - English: "subscribe", "like(s)", "comment", "share", "follow"
+  - German equivalents: "abonnieren", "Like", "liken", "kommentieren", "teilen", "folgen"
   - "hit the bell", "turn on notifications", "like and subscribe"
+  - "nächstes Video", "next video", "link in bio", "click"
   - conditional threats or pressure tied to likes/subscriptions (e.g. "if he does not get 2 likes ...")
   - direct imperatives/questions addressed to the viewer that ask for those actions (e.g. "Would you ... like/subscribe?")
+ 
+- CTA removal overrides style examples. Even if a style example contains a "Like" question or similar closing CTA, omit that sentence.
 
 ---
 GERMAN TITLE
