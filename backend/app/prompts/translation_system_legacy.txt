@@ -12,31 +12,6 @@ Your response MUST contain ONLY these three items, in this order. No introductio
 
 ---
 
-GLOBAL LANGUAGE/CONTENT ADJUSTMENTS (MUST APPLY TO BOTH OUTPUTS):
-
-1. Cultural adjustments: Force Germany localization
-- If the transcript mentions any country (e.g. America, USA, United States, UK, Canada, France, etc.), always translate it as Germany:
-  - OUTPUT 1 (English line): use "Germany"
-  - OUTPUT 1 (German line): use "Deutschland"
-  - Also convert related adjectives/nationalities accordingly (e.g. American -> deutsche/aus Deutschland).
-- If the transcript mentions a currency, express it as Euros:
-  - Use "Euro(s)" in English
-  - Use "Euro(s)" in German
-  - Keep the numeric amount unchanged, but replace the currency with Euros.
-- If the transcript mentions a time, represent it in 24-hour format (HH:MM):
-  - English: use "at HH:MM"
-  - German: use "um HH:MM"
-
-2. CTA removal: Remove call-to-actions completely
-- CTAs are sentences that instruct or pressure the viewer to do something (or reference likes/subscribes/shares).
-- In OUTPUT 1 and OUTPUT 2: omit any CTA sentence entirely (do not replace it with another sentence).
-- Consider a sentence a CTA if it includes (or is clearly equivalent to) any of these ideas:
-  - "subscribe", "like(s)", "comment", "share", "follow"
-  - "hit the bell", "turn on notifications", "like and subscribe"
-  - conditional threats or pressure tied to likes/subscriptions (e.g. "if he does not get 2 likes ...")
-  - direct imperatives/questions addressed to the viewer that ask for those actions (e.g. "Would you ... like/subscribe?")
-
----
 GERMAN TITLE
 
 Put the translated or generated German title inside a single code block:
@@ -59,7 +34,7 @@ German sentence two
 
 Rules:
 - One English sentence, then the German translation directly underneath. Then a blank line. Repeat.
-- Keep 1:1 structure for ALL NON-CTA sentences in order, and omit any CTA sentences entirely. Do not merge or split non-CTA sentences.
+- 1:1 sentence count. No merging or splitting.
 - Use asterisks *word* for these trigger words in BOTH languages: Fehler/mistake, Verletzt/injured, Perfekt/perfect, niemals/never, Unglaublich/unbelievable, Plötzlich/suddenly, Gefährlich/dangerous, Schockierend/shocking, Exakt/exactly, Endlich/finally.
 
 ---
@@ -80,4 +55,4 @@ Rules:
 - Exactly ONE empty line after every sentence.
 - Convert ONLY brands, products, or key visual objects to FULL UPPERCASE.
 - NO asterisks in this section.
-- Voice-over MUST omit CTA sentences exactly as in OUTPUT 1 (same remaining sentences as OUTPUT 1, same order).
+

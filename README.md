@@ -21,6 +21,7 @@ One input: YouTube video URL. Output: sentence match (EN/DE), TTS text, translat
    - `TRANSCRIPT_PROVIDER_PRIMARY` — `transcriptapi` or `fetchtranscript` (default: `transcriptapi`)
    - `TRANSCRIPT_PROVIDER_FALLBACK` — `transcriptapi` or `fetchtranscript` (default: `fetchtranscript`)
    - `ANTHROPIC_API_KEY` — your Anthropic (Claude) API key
+   - `TRANSLATION_SYSTEM_PROMPT_FILE` — optional; set to `translation_system_legacy.txt` to revert older sentence-match prompt
    - **Voice-over (optional):** `AI33_API_KEY`, `AI33_BASE_URL` (from ai33 API docs), `AI33_VOICE_ID` (default: Lars), `AI33_MODEL` (e.g. `eleven_multilingual_v3`)
 
 3. **Run the backend**

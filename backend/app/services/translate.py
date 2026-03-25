@@ -50,7 +50,11 @@ def translate_transcript(
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY is not set")
 
-    system = _load_prompt("translation_system.txt")
+    system_prompt_file = (
+        (os.environ.get("TRANSLATION_SYSTEM_PROMPT_FILE") or "").strip()
+        or "translation_system.txt"
+    )
+    system = _load_prompt(system_prompt_file)
     examples = _load_prompt("german_style_examples.txt")
     if examples:
         system += "\n\n---\n\nGerman style examples:\n\n" + examples
