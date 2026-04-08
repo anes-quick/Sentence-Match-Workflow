@@ -983,16 +983,44 @@
       return raw
         .map((item) => {
           if (!item || typeof item !== 'object') return null;
-          const videoId = (item.video_id || item.videoId || '').toString().trim();
-          const channelName = (item.channel_name || item.channelName || '').toString().trim();
-          const title = (item.title || '').toString().trim();
-          const channelId = (item.channel_id || item.channelId || '').toString().trim();
-          if (!videoId || !channelName || !title || !channelId) return null;
+          const videoId = (
+            item.video_id ||
+            item.videoId ||
+            item.youtube_video_id ||
+            item.yt_video_id ||
+            item.source_video_id ||
+            item.id ||
+            ''
+          ).toString().trim();
+          const channelName = (
+            item.channel_name ||
+            item.channelName ||
+            item.channel ||
+            item.channelTitle ||
+            item.source_channel_name ||
+            item.author ||
+            ''
+          ).toString().trim();
+          const title = (
+            item.title ||
+            item.video_title ||
+            item.transcript_title ||
+            item.source_title ||
+            ''
+          ).toString().trim();
+          const channelId = (
+            item.channel_id ||
+            item.channelId ||
+            item.yt_channel_id ||
+            item.source_channel_id ||
+            ''
+          ).toString().trim();
+          if (!videoId || !title) return null;
           return {
             video_id: videoId,
-            channel_name: channelName,
+            channel_name: channelName || 'Unknown channel',
             title: title,
-            channel_id: channelId,
+            channel_id: channelId || 'unknown',
           };
         })
         .filter(Boolean);
@@ -1024,12 +1052,14 @@
           const msg = cacheData.detail || cacheData.message || cacheRes.statusText || 'Failed to fetch competitor transcript cache.';
           throw new Error(typeof msg === 'string' ? msg : 'Failed to fetch competitor transcript cache.');
         }
-        const rows = Array.isArray(cacheData) ? cacheData : (Array.isArray(cacheData.items) ? cacheData.items : []);
+      const rows = Array.isArray(cacheData)
+        ? cacheData
+        : (Array.isArray(cacheData.items) ? cacheData.items : (Array.isArray(cacheData.transcripts) ? cacheData.transcripts : []));
         list = sanitizeCompetitorVideos(rows.map((row) => ({
-          video_id: row.video_id || row.videoId || row.id || '',
-          channel_name: row.channel_name || row.channel || row.channelTitle || '',
-          title: row.title || row.video_title || '',
-          channel_id: row.channel_id || row.channelId || '',
+        video_id: row.video_id || row.videoId || row.youtube_video_id || row.yt_video_id || row.id || '',
+        channel_name: row.channel_name || row.channel || row.channelTitle || row.author || '',
+        title: row.title || row.video_title || row.transcript_title || row.source_title || '',
+        channel_id: row.channel_id || row.channelId || row.yt_channel_id || '',
         })));
       }
       if (!list.length) throw new Error('Competitor video list is empty or invalid.');
@@ -1041,10 +1071,11 @@
       if (!sentenceMatch) return { duplicate: false, message: '' };
       const transcriptText = (lastResult && lastResult.transcript_text) ? String(lastResult.transcript_text) : '';
       const competitorVideos = await fetchCompetitorVideos();
+      const checkText = transcriptText.trim() || sentenceMatch;
       const payload = {
         transcript_text: transcriptText,
         competitor_videos: competitorVideos,
-        text: sentenceMatch,
+        text: checkText,
         sentence_match: sentenceMatch,
         translated_title: (lastResult && lastResult.translated_title) || '',
         video_url: currentVideoUrl || '',
