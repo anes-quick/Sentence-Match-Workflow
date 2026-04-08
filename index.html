@@ -1026,44 +1026,62 @@
         .filter(Boolean);
     }
 
-    async function fetchCompetitorVideos() {
-      const res = await fetch(`${COMPETITOR_BACKEND_URL}/api/integration/competitor-videos`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok && res.status !== 404) {
-        const msg = data.detail || data.message || res.statusText || 'Failed to fetch competitor videos.';
-        throw new Error(typeof msg === 'string' ? msg : 'Failed to fetch competitor videos.');
+    function extractChannelIds(raw) {
+      const arr = Array.isArray(raw)
+        ? raw
+        : (raw && Array.isArray(raw.channels) ? raw.channels : (raw && Array.isArray(raw.items) ? raw.items : []));
+      const out = arr.map((item) => {
+        if (typeof item === 'string') return item.trim();
+        if (!item || typeof item !== 'object') return '';
+        return String(item.channel_id || item.channelId || item.youtube_channel_id || item.id || '').trim();
+      }).filter(Boolean);
+      return Array.from(new Set(out));
+    }
+
+    async function fetchWorkflowChannelIds() {
+      const endpoints = [
+        `${COMPETITOR_BACKEND_URL}/api/integration/workflow-channels`,
+        `${COMPETITOR_BACKEND_URL}/api/integration/tracked-channels`,
+      ];
+      for (const endpoint of endpoints) {
+        const res = await fetch(endpoint, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+        if (res.status === 404) continue;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = data.detail || data.message || res.statusText || 'Failed to fetch workflow channel list.';
+          throw new Error(typeof msg === 'string' ? msg : 'Failed to fetch workflow channel list.');
+        }
+        const ids = extractChannelIds(data);
+        if (ids.length > 0) return ids;
       }
-      let list = [];
-      if (res.ok) list = sanitizeCompetitorVideos(data.competitor_videos || data.items || data.videos || data);
-      if (!list.length) {
-        // Fallback: competitor checker already exposes transcript cache entries.
-        const cacheRes = await fetch(`${COMPETITOR_BACKEND_URL}/api/transcripts/cache`, {
+      throw new Error('No workflow/tracked channels available on competitor backend.');
+    }
+
+    async function fetchCompetitorVideos() {
+      const channelIds = await fetchWorkflowChannelIds();
+      const perChannel = await Promise.all(channelIds.map(async (channelId) => {
+        const res = await fetch(`${COMPETITOR_BACKEND_URL}/api/youtube/channels/${encodeURIComponent(channelId)}/recent-videos?max_results=10`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         });
-        const cacheData = await cacheRes.json().catch(() => ({}));
-        if (res.status === 404 && cacheRes.status === 404) {
-          throw new Error('Competitor backend URL is not configured for Sentence Match Workflow. Set window.COMPETITOR_BACKEND_URL or localStorage["competitor-backend-url"].');
-        }
-        if (!cacheRes.ok) {
-          const msg = cacheData.detail || cacheData.message || cacheRes.statusText || 'Failed to fetch competitor transcript cache.';
-          throw new Error(typeof msg === 'string' ? msg : 'Failed to fetch competitor transcript cache.');
-        }
-      const rows = Array.isArray(cacheData)
-        ? cacheData
-        : (Array.isArray(cacheData.items) ? cacheData.items : (Array.isArray(cacheData.transcripts) ? cacheData.transcripts : []));
-        list = sanitizeCompetitorVideos(rows.map((row) => ({
-        video_id: row.video_id || row.videoId || row.youtube_video_id || row.yt_video_id || row.id || '',
-        channel_name: row.channel_name || row.channel || row.channelTitle || row.author || '',
-        title: row.title || row.video_title || row.transcript_title || row.source_title || '',
-        channel_id: row.channel_id || row.channelId || row.yt_channel_id || '',
-        })));
-      }
-      if (!list.length) throw new Error('Competitor video list is empty or invalid.');
-      return list;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return [];
+        const items = Array.isArray(data.items) ? data.items : [];
+        return items.map((it) => {
+          const sn = (it && it.snippet) || {};
+          const rid = sn.resourceId || {};
+          return {
+            video_id: rid.videoId || '',
+            channel_name: sn.channelTitle || 'Unknown channel',
+            title: sn.title || '',
+            channel_id: channelId,
+          };
+        });
+      }));
+      const list = sanitizeCompetitorVideos(perChannel.flat());
+      if (!list.length) throw new Error('No competitor videos found from workflow/tracked channels.');
+      const deduped = Array.from(new Map(list.map((v) => [v.video_id, v])).values());
+      return deduped;
     }
 
     async function checkCompetitorDuplicate() {
@@ -1079,6 +1097,8 @@
         sentence_match: sentenceMatch,
         translated_title: (lastResult && lastResult.translated_title) || '',
         video_url: currentVideoUrl || '',
+        source_video_url: currentVideoUrl || '',
+        source_title: (lastResult && lastResult.translated_title) || '',
       };
       const res = await fetch(`${COMPETITOR_BACKEND_URL}/api/integration/check-text`, {
         method: 'POST',
