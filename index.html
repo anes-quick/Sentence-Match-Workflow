@@ -270,16 +270,6 @@
     const BACKEND_URL = (!window.location.hostname || /localhost|127\.0\.0\.1/.test(window.location.hostname))
       ? 'http://localhost:8001'
       : 'https://sentence-match-workflow-production.up.railway.app';
-    const COMPETITOR_CHECKER_BASE_URL = (() => {
-      let configured = '';
-      try {
-        configured = (window.COMPETITOR_CHECKER_URL && String(window.COMPETITOR_CHECKER_URL)) ||
-          (window.localStorage && window.localStorage.getItem('competitor-checker-base-url')) ||
-          '';
-      } catch (_) {}
-      return (configured || BACKEND_URL).replace(/\/+$/, '');
-    })();
-
     const statusEl = document.getElementById('status');
     const videoUrlEl = document.getElementById('videoUrl');
     const processBtn = document.getElementById('processBtn');
@@ -897,28 +887,17 @@
         .filter(Boolean);
     }
 
-    async function getCompetitorVideos() {
+    function getCompetitorVideos() {
       const local = sanitizeCompetitorVideos(lastResult && lastResult.competitor_videos);
       if (local.length > 0) return local;
-      const res = await fetch(`${COMPETITOR_CHECKER_BASE_URL}/api/integration/competitor-videos`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data.detail || data.message || res.statusText || 'Failed to load competitor videos';
-        throw new Error(typeof msg === 'string' ? msg : 'Failed to load competitor videos');
-      }
-      const fromResponse = sanitizeCompetitorVideos(data.competitor_videos || data.items || data.videos || data);
-      if (fromResponse.length === 0) throw new Error('No competitor videos available for duplicate check.');
-      return fromResponse;
+      throw new Error('competitor_videos unavailable; run competitor refresh/load first.');
     }
 
     async function checkCompetitorDuplicate() {
       const sentenceMatch = (lastResult && lastResult.sentence_match) ? String(lastResult.sentence_match).trim() : '';
       if (!sentenceMatch) return { duplicate: false, message: '' };
       const transcriptText = (lastResult && lastResult.transcript_text) ? String(lastResult.transcript_text) : '';
-      const competitorVideos = await getCompetitorVideos();
+      const competitorVideos = getCompetitorVideos();
       const payload = {
         transcript_text: transcriptText,
         competitor_videos: competitorVideos,
