@@ -755,6 +755,7 @@
     const trelloConfirmCancel = document.getElementById('trelloConfirmCancel');
     const trelloConfirmOk = document.getElementById('trelloConfirmOk');
     const duplicateConfirmBackdrop = document.getElementById('duplicateConfirmBackdrop');
+    const duplicateConfirmTitle = document.getElementById('duplicateConfirmTitle');
     const duplicateConfirmCancel = document.getElementById('duplicateConfirmCancel');
     const duplicateConfirmOk = document.getElementById('duplicateConfirmOk');
     const duplicateConfirmDetails = document.getElementById('duplicateConfirmDetails');
@@ -805,9 +806,32 @@
       });
     }
 
-    function openDuplicateConfirm(message) {
+    function openDuplicateConfirm(duplicateCheck) {
       if (!duplicateConfirmBackdrop) return;
-      if (duplicateConfirmDetails) duplicateConfirmDetails.textContent = (message || '').trim() || 'Potential duplicate detected.';
+      const message = duplicateCheck && duplicateCheck.message ? duplicateCheck.message : '';
+      const matches = (duplicateCheck && Array.isArray(duplicateCheck.matches)) ? duplicateCheck.matches : [];
+      const hasStructuredMatches = matches.length > 0;
+      if (duplicateConfirmTitle) {
+        duplicateConfirmTitle.textContent = duplicateCheck && duplicateCheck.duplicate
+          ? 'Already uploaded: possible duplicate detected'
+          : 'Possible duplicate detected';
+      }
+      if (duplicateConfirmDetails) {
+        if (hasStructuredMatches) {
+          duplicateConfirmDetails.innerHTML = matches.slice(0, 5).map((m) => {
+            const title = (m.title || 'Untitled').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const channel = (m.channel_name || m.channel || 'Unknown channel').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const link = (m.url || m.video_url || m.link || '').toString().trim();
+            const safeLink = link.replace(/"/g, '&quot;');
+            const linkHtml = safeLink
+              ? `<a href="${safeLink}" target="_blank" rel="noopener noreferrer">${safeLink}</a>`
+              : 'No link available';
+            return `<div style="margin-bottom:0.55rem;"><div><strong>${title}</strong></div><div style="font-size:0.78rem;color:var(--muted);">${channel}</div><div style="font-size:0.78rem;">${linkHtml}</div></div>`;
+          }).join('');
+        } else {
+          duplicateConfirmDetails.textContent = (message || '').trim() || 'Potential duplicate detected.';
+        }
+      }
       duplicateConfirmBackdrop.classList.add('open');
     }
 
@@ -816,7 +840,7 @@
       duplicateConfirmBackdrop.classList.remove('open');
     }
 
-    function askDuplicateOverride(message) {
+    function askDuplicateOverride(duplicateCheck) {
       return new Promise((resolve) => {
         if (!duplicateConfirmBackdrop || !duplicateConfirmOk || !duplicateConfirmCancel) {
           resolve(false);
@@ -836,35 +860,49 @@
         }
         duplicateConfirmOk.addEventListener('click', onOk);
         duplicateConfirmCancel.addEventListener('click', onCancel);
-        openDuplicateConfirm(message);
+        openDuplicateConfirm(duplicateCheck);
       });
     }
 
+    function normalizeMatchItem(m) {
+      if (!m || typeof m !== 'object') return null;
+      const title = (m.title || m.name || '').toString().trim();
+      const channel = (m.channel_name || m.channel || '').toString().trim();
+      const url = (m.url || m.video_url || m.link || '').toString().trim();
+      if (!title && !channel && !url) return null;
+      return { title, channel_name: channel, url };
+    }
+
     function normalizeDuplicateCheckResult(raw) {
-      if (!raw || typeof raw !== 'object') return { duplicate: false, message: '' };
+      if (!raw || typeof raw !== 'object') throw new Error('Duplicate check returned invalid response; blocking Trello creation.');
+      const hasExplicitFlag =
+        Object.prototype.hasOwnProperty.call(raw, 'duplicate') ||
+        Object.prototype.hasOwnProperty.call(raw, 'is_duplicate') ||
+        Object.prototype.hasOwnProperty.call(raw, 'has_duplicate') ||
+        Object.prototype.hasOwnProperty.call(raw, 'found_duplicate');
+      const rawMatches = Array.isArray(raw.matches) ? raw.matches : (Array.isArray(raw.duplicates) ? raw.duplicates : null);
+      const hasStructuredArray = Array.isArray(rawMatches);
+      if (!hasExplicitFlag && !hasStructuredArray) {
+        throw new Error('Duplicate check returned invalid response; blocking Trello creation.');
+      }
+      const matches = (rawMatches || []).map(normalizeMatchItem).filter(Boolean);
       const duplicate = Boolean(
         raw.duplicate ||
         raw.is_duplicate ||
         raw.has_duplicate ||
         raw.found_duplicate ||
-        (Array.isArray(raw.matches) && raw.matches.length > 0) ||
-        (Array.isArray(raw.duplicates) && raw.duplicates.length > 0)
+        matches.length > 0
       );
       let message = '';
       if (typeof raw.message === 'string') message = raw.message.trim();
       else if (typeof raw.detail === 'string') message = raw.detail.trim();
-      else if (Array.isArray(raw.matches) && raw.matches.length > 0) {
-        message = raw.matches.map((m) => {
+      else if (matches.length > 0) {
+        message = matches.map((m) => {
           if (!m || typeof m !== 'object') return String(m);
-          return m.title || m.name || m.url || JSON.stringify(m);
-        }).join('\n');
-      } else if (Array.isArray(raw.duplicates) && raw.duplicates.length > 0) {
-        message = raw.duplicates.map((m) => {
-          if (!m || typeof m !== 'object') return String(m);
-          return m.title || m.name || m.url || JSON.stringify(m);
+          return m.title || m.channel_name || m.url || JSON.stringify(m);
         }).join('\n');
       }
-      return { duplicate, message };
+      return { duplicate, message, matches };
     }
 
     function sanitizeCompetitorVideos(raw) {
@@ -946,7 +984,7 @@
         // 1) Check competitor duplicates before Trello creation.
         const duplicateCheck = await checkCompetitorDuplicate();
         if (duplicateCheck.duplicate) {
-          const ok = await askDuplicateOverride(duplicateCheck.message);
+          const ok = await askDuplicateOverride(duplicateCheck);
           if (!ok) {
             apiErrorEl.textContent = 'Trello creation canceled because a potential duplicate was detected.';
             apiErrorEl.style.display = 'block';
