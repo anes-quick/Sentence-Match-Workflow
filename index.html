@@ -121,6 +121,12 @@
       color: var(--muted);
       margin-bottom: 0.6rem;
     }
+    .duplicate-inline-warning { border: 1px solid rgba(248,113,113,0.5); background: rgba(248,113,113,0.1); border-radius: 8px; padding: 0.7rem 0.8rem; margin-bottom: 1rem; font-size: 0.85rem; display: none; }
+    .duplicate-inline-warning.show { display: block; }
+    .duplicate-inline-warning .title { font-weight: 600; margin-bottom: 0.35rem; }
+    .duplicate-inline-warning .meta { color: var(--muted); font-size: 0.78rem; margin-top: 0.35rem; }
+    .duplicate-inline-warning .match { margin-top: 0.45rem; }
+    .duplicate-inline-warning .match a { color: var(--accent); word-break: break-all; }
   </style>
 </head>
 <body>
@@ -150,6 +156,7 @@
         <button type="button" class="btn btn-primary" id="processBtn">Process</button>
       </div>
       <p id="apiError" class="error" style="display: none;"></p>
+      <div id="duplicateInlineWarning" class="duplicate-inline-warning" aria-live="polite"></div>
 
       <div id="results">
         <div class="card title-card">
@@ -270,6 +277,13 @@
     const BACKEND_URL = (!window.location.hostname || /localhost|127\.0\.0\.1/.test(window.location.hostname))
       ? 'http://localhost:8001'
       : 'https://sentence-match-workflow-production.up.railway.app';
+    const COMPETITOR_BACKEND_URL = (() => {
+      try {
+        return ((window.COMPETITOR_BACKEND_URL && String(window.COMPETITOR_BACKEND_URL)) || BACKEND_URL).replace(/\/+$/, '');
+      } catch (_) {
+        return BACKEND_URL;
+      }
+    })();
     const statusEl = document.getElementById('status');
     const videoUrlEl = document.getElementById('videoUrl');
     const processBtn = document.getElementById('processBtn');
@@ -293,6 +307,9 @@
     let selectedVoiceLabel = 'Fast MF';
     let trelloChannel = '';
     let trelloVideoNumber = '';
+    let duplicateCheck = { status: 'idle', duplicate: false, matches: [], message: '', checkedAt: null };
+    let duplicateCheckPromise = null;
+    const DUPLICATE_CHECK_STALE_MS = 10 * 60 * 1000;
 
     function getStorage() {
       try {
@@ -429,6 +446,60 @@
       resultsEl.querySelectorAll('.card').forEach(c => c.classList.toggle('loading', loading));
     }
 
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function isDuplicateCheckStale() {
+      if (!duplicateCheck || duplicateCheck.checkedAt == null) return true;
+      return (Date.now() - duplicateCheck.checkedAt) > DUPLICATE_CHECK_STALE_MS;
+    }
+
+    function renderDuplicateInlineWarning() {
+      const el = document.getElementById('duplicateInlineWarning');
+      if (!el) return;
+      if (duplicateCheck.status === 'idle') {
+        el.classList.remove('show');
+        el.innerHTML = '';
+        return;
+      }
+      if (duplicateCheck.status === 'running') {
+        el.classList.add('show');
+        el.style.borderColor = 'var(--border)';
+        el.style.background = 'rgba(255,255,255,0.03)';
+        el.innerHTML = '<div class="title">Checking for duplicate uploads...</div>';
+        return;
+      }
+      if (duplicateCheck.status === 'error') {
+        el.classList.add('show');
+        el.style.borderColor = 'rgba(248,113,113,0.5)';
+        el.style.background = 'rgba(248,113,113,0.1)';
+        el.innerHTML = '<div class="title">Duplicate check failed</div><div>' + escapeHtml(duplicateCheck.message || 'Could not verify duplicates.') + '</div>';
+        return;
+      }
+      if (duplicateCheck.duplicate) {
+        const matches = Array.isArray(duplicateCheck.matches) ? duplicateCheck.matches.slice(0, 5) : [];
+        const matchesHtml = matches.map((m) => {
+          const title = escapeHtml(m.title || 'Untitled');
+          const channel = escapeHtml(m.channel_name || m.channel || 'Unknown channel');
+          const link = escapeHtml(m.url || '');
+          const linkHtml = link ? `<a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a>` : 'No link available';
+          return `<div class="match"><strong>${title}</strong><div class="meta">${channel}</div><div>${linkHtml}</div></div>`;
+        }).join('');
+        el.classList.add('show');
+        el.style.borderColor = 'rgba(248,113,113,0.5)';
+        el.style.background = 'rgba(248,113,113,0.1)';
+        el.innerHTML = '<div class="title">Already uploaded: possible duplicate detected</div>'
+          + (matchesHtml || '<div>' + escapeHtml(duplicateCheck.message || 'Potential duplicate detected.') + '</div>')
+          + '<div class="meta">Trello creation will require explicit override.</div>';
+        return;
+      }
+      el.classList.add('show');
+      el.style.borderColor = 'rgba(74,222,128,0.45)';
+      el.style.background = 'rgba(74,222,128,0.08)';
+      el.innerHTML = '<div class="title">No duplicate detected</div><div class="meta">Checked just now.</div>';
+    }
+
     function setVoiceoverState(state) {
       const card = document.getElementById('voiceoverCard');
       const statusEl = document.getElementById('voiceoverStatus');
@@ -548,6 +619,9 @@
           lastResult = item.data;
           currentVideoUrl = item.url || '';
           renderCards(item.data);
+          duplicateCheck = { status: 'idle', duplicate: false, matches: [], message: '', checkedAt: null };
+          renderDuplicateInlineWarning();
+          runDuplicateCheckEarly(true);
           if (!restoreVoiceoverForId(item.id)) {
             revokeCurrentVoiceover();
             setVoiceoverState('empty');
@@ -657,6 +731,8 @@
       }
       apiErrorEl.style.display = 'none';
       apiErrorEl.textContent = '';
+      duplicateCheck = { status: 'idle', duplicate: false, matches: [], message: '', checkedAt: null };
+      renderDuplicateInlineWarning();
       processBtn.disabled = true;
       setCardsLoading(true);
       try {
@@ -673,6 +749,7 @@
         }
         addToHistory(data, url);
         if ((data.tts_text || '').trim()) fetchAndShowVoiceover(data.tts_text);
+        runDuplicateCheckEarly(true);
       } finally {
         processBtn.disabled = false;
         processBtn.textContent = 'Process';
@@ -871,8 +948,10 @@
       const title = (m.title || m.name || '').toString().trim();
       const channel = (m.channel_name || m.channel || '').toString().trim();
       const url = (m.url || m.video_url || m.link || '').toString().trim();
-      if (!title && !channel && !url) return null;
-      return { title, channel_name: channel, url };
+      const videoId = (m.video_id || m.videoId || '').toString().trim();
+      if (!title && !channel && !url && !videoId) return null;
+      const finalUrl = url || (videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}` : '');
+      return { title, channel_name: channel, url: finalUrl, video_id: videoId };
     }
 
     function normalizeDuplicateCheckResult(raw) {
@@ -927,17 +1006,26 @@
         .filter(Boolean);
     }
 
-    function getCompetitorVideos() {
-      const local = sanitizeCompetitorVideos(lastResult && lastResult.competitor_videos);
-      if (local.length > 0) return local;
-      throw new Error('competitor_videos unavailable; run competitor refresh/load first.');
+    async function fetchCompetitorVideos() {
+      const res = await fetch(`${COMPETITOR_BACKEND_URL}/api/integration/competitor-videos`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data.detail || data.message || res.statusText || 'Failed to fetch competitor videos.';
+        throw new Error(typeof msg === 'string' ? msg : 'Failed to fetch competitor videos.');
+      }
+      const list = sanitizeCompetitorVideos(data.competitor_videos || data.items || data.videos || data);
+      if (!list.length) throw new Error('Competitor video list is empty or invalid.');
+      return list;
     }
 
     async function checkCompetitorDuplicate() {
       const sentenceMatch = (lastResult && lastResult.sentence_match) ? String(lastResult.sentence_match).trim() : '';
       if (!sentenceMatch) return { duplicate: false, message: '' };
       const transcriptText = (lastResult && lastResult.transcript_text) ? String(lastResult.transcript_text) : '';
-      const competitorVideos = getCompetitorVideos();
+      const competitorVideos = await fetchCompetitorVideos();
       const payload = {
         transcript_text: transcriptText,
         competitor_videos: competitorVideos,
@@ -946,7 +1034,7 @@
         translated_title: (lastResult && lastResult.translated_title) || '',
         video_url: currentVideoUrl || '',
       };
-      const res = await fetch(`${BACKEND_URL}/api/integration/check-text`, {
+      const res = await fetch(`${COMPETITOR_BACKEND_URL}/api/integration/check-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -957,6 +1045,39 @@
         throw new Error(typeof msg === 'string' ? msg : 'Duplicate check failed');
       }
       return normalizeDuplicateCheckResult(data);
+    }
+
+    async function runDuplicateCheckEarly(force) {
+      if (!lastResult) return duplicateCheck;
+      if (!force && duplicateCheck.status === 'success' && !isDuplicateCheckStale()) return duplicateCheck;
+      if (duplicateCheckPromise) return duplicateCheckPromise;
+      duplicateCheck = { status: 'running', duplicate: false, matches: [], message: '', checkedAt: null };
+      renderDuplicateInlineWarning();
+      duplicateCheckPromise = (async () => {
+        try {
+          const result = await checkCompetitorDuplicate();
+          duplicateCheck = {
+            status: 'success',
+            duplicate: !!result.duplicate,
+            matches: Array.isArray(result.matches) ? result.matches : [],
+            message: result.message || '',
+            checkedAt: Date.now(),
+          };
+        } catch (e) {
+          duplicateCheck = {
+            status: 'error',
+            duplicate: false,
+            matches: [],
+            message: (e && e.message) || 'Duplicate check failed.',
+            checkedAt: Date.now(),
+          };
+        } finally {
+          duplicateCheckPromise = null;
+          renderDuplicateInlineWarning();
+        }
+        return duplicateCheck;
+      })();
+      return duplicateCheckPromise;
     }
 
     async function doCreateTrelloCard(forceNewFolder) {
@@ -983,8 +1104,19 @@
           });
         }
 
-        // 1) Check competitor duplicates before Trello creation.
-        const duplicateCheck = await checkCompetitorDuplicate();
+        // 1) Use early duplicate check result (rerun only if stale).
+        if (duplicateCheck.status === 'running') await (duplicateCheckPromise || runDuplicateCheckEarly(false));
+        if (duplicateCheck.status === 'idle' || isDuplicateCheckStale()) await runDuplicateCheckEarly(true);
+        if (duplicateCheck.status === 'error') {
+          apiErrorEl.textContent = duplicateCheck.message || 'Duplicate check failed; cannot create Trello card.';
+          apiErrorEl.style.display = 'block';
+          return;
+        }
+        if (duplicateCheck.status !== 'success') {
+          apiErrorEl.textContent = 'Duplicate check did not complete; cannot create Trello card.';
+          apiErrorEl.style.display = 'block';
+          return;
+        }
         if (duplicateCheck.duplicate) {
           const ok = await askDuplicateOverride(duplicateCheck);
           if (!ok) {
@@ -1115,9 +1247,11 @@
       activeHistoryId = history[0].id;
       currentVideoUrl = history[0].url || '';
       renderCards(lastResult);
+      runDuplicateCheckEarly(true);
       if (!restoreVoiceoverForId(activeHistoryId)) setVoiceoverState('empty');
     } else {
       setVoiceoverState('empty');
+      renderDuplicateInlineWarning();
     }
     renderHistory();
   </script>
