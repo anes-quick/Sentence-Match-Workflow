@@ -104,6 +104,23 @@
     .btn-small { padding: 0.45rem 0.9rem; font-size: 0.85rem; }
     .home-link { display: inline-flex; align-items: center; justify-content: center; }
     .home-link img { width: 46px; height: 46px; display: block; }
+    .duplicate-warning-box {
+      font-size: 0.85rem;
+      color: var(--text);
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.45);
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.75rem;
+      white-space: pre-wrap;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .duplicate-warning-meta {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
   </style>
 </head>
 <body>
@@ -234,10 +251,34 @@
       </div>
     </div>
   </div>
+
+  <div class="modal-backdrop" id="duplicateConfirmBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="duplicateConfirmTitle">
+      <h2 id="duplicateConfirmTitle">Possible duplicate detected</h2>
+      <p class="duplicate-warning-meta">
+        Competitor Upload Checker found a potential duplicate for this sentence match.
+        Continue only if you intentionally want to override this warning.
+      </p>
+      <div id="duplicateConfirmDetails" class="duplicate-warning-box">Potential duplicate detected.</div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="duplicateConfirmCancel">Cancel</button>
+        <button type="button" class="btn btn-primary btn-small" id="duplicateConfirmOk">Override and create card</button>
+      </div>
+    </div>
+  </div>
   <script>
     const BACKEND_URL = (!window.location.hostname || /localhost|127\.0\.0\.1/.test(window.location.hostname))
       ? 'http://localhost:8001'
       : 'https://sentence-match-workflow-production.up.railway.app';
+    const COMPETITOR_CHECKER_BASE_URL = (() => {
+      let configured = '';
+      try {
+        configured = (window.COMPETITOR_CHECKER_URL && String(window.COMPETITOR_CHECKER_URL)) ||
+          (window.localStorage && window.localStorage.getItem('competitor-checker-base-url')) ||
+          '';
+      } catch (_) {}
+      return (configured || BACKEND_URL).replace(/\/+$/, '');
+    })();
 
     const statusEl = document.getElementById('status');
     const videoUrlEl = document.getElementById('videoUrl');
@@ -723,6 +764,10 @@
     const trelloConfirmBackdrop = document.getElementById('trelloConfirmBackdrop');
     const trelloConfirmCancel = document.getElementById('trelloConfirmCancel');
     const trelloConfirmOk = document.getElementById('trelloConfirmOk');
+    const duplicateConfirmBackdrop = document.getElementById('duplicateConfirmBackdrop');
+    const duplicateConfirmCancel = document.getElementById('duplicateConfirmCancel');
+    const duplicateConfirmOk = document.getElementById('duplicateConfirmOk');
+    const duplicateConfirmDetails = document.getElementById('duplicateConfirmDetails');
 
     function openTrelloModal() {
       if (!trelloModalBackdrop) return;
@@ -770,6 +815,131 @@
       });
     }
 
+    function openDuplicateConfirm(message) {
+      if (!duplicateConfirmBackdrop) return;
+      if (duplicateConfirmDetails) duplicateConfirmDetails.textContent = (message || '').trim() || 'Potential duplicate detected.';
+      duplicateConfirmBackdrop.classList.add('open');
+    }
+
+    function closeDuplicateConfirm() {
+      if (!duplicateConfirmBackdrop) return;
+      duplicateConfirmBackdrop.classList.remove('open');
+    }
+
+    function askDuplicateOverride(message) {
+      return new Promise((resolve) => {
+        if (!duplicateConfirmBackdrop || !duplicateConfirmOk || !duplicateConfirmCancel) {
+          resolve(false);
+          return;
+        }
+        function onOk() {
+          duplicateConfirmOk.removeEventListener('click', onOk);
+          duplicateConfirmCancel.removeEventListener('click', onCancel);
+          closeDuplicateConfirm();
+          resolve(true);
+        }
+        function onCancel() {
+          duplicateConfirmOk.removeEventListener('click', onOk);
+          duplicateConfirmCancel.removeEventListener('click', onCancel);
+          closeDuplicateConfirm();
+          resolve(false);
+        }
+        duplicateConfirmOk.addEventListener('click', onOk);
+        duplicateConfirmCancel.addEventListener('click', onCancel);
+        openDuplicateConfirm(message);
+      });
+    }
+
+    function normalizeDuplicateCheckResult(raw) {
+      if (!raw || typeof raw !== 'object') return { duplicate: false, message: '' };
+      const duplicate = Boolean(
+        raw.duplicate ||
+        raw.is_duplicate ||
+        raw.has_duplicate ||
+        raw.found_duplicate ||
+        (Array.isArray(raw.matches) && raw.matches.length > 0) ||
+        (Array.isArray(raw.duplicates) && raw.duplicates.length > 0)
+      );
+      let message = '';
+      if (typeof raw.message === 'string') message = raw.message.trim();
+      else if (typeof raw.detail === 'string') message = raw.detail.trim();
+      else if (Array.isArray(raw.matches) && raw.matches.length > 0) {
+        message = raw.matches.map((m) => {
+          if (!m || typeof m !== 'object') return String(m);
+          return m.title || m.name || m.url || JSON.stringify(m);
+        }).join('\n');
+      } else if (Array.isArray(raw.duplicates) && raw.duplicates.length > 0) {
+        message = raw.duplicates.map((m) => {
+          if (!m || typeof m !== 'object') return String(m);
+          return m.title || m.name || m.url || JSON.stringify(m);
+        }).join('\n');
+      }
+      return { duplicate, message };
+    }
+
+    function sanitizeCompetitorVideos(raw) {
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          const videoId = (item.video_id || item.videoId || '').toString().trim();
+          const channelName = (item.channel_name || item.channelName || '').toString().trim();
+          const title = (item.title || '').toString().trim();
+          const channelId = (item.channel_id || item.channelId || '').toString().trim();
+          if (!videoId || !channelName || !title || !channelId) return null;
+          return {
+            video_id: videoId,
+            channel_name: channelName,
+            title: title,
+            channel_id: channelId,
+          };
+        })
+        .filter(Boolean);
+    }
+
+    async function getCompetitorVideos() {
+      const local = sanitizeCompetitorVideos(lastResult && lastResult.competitor_videos);
+      if (local.length > 0) return local;
+      const res = await fetch(`${COMPETITOR_CHECKER_BASE_URL}/api/integration/competitor-videos`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data.detail || data.message || res.statusText || 'Failed to load competitor videos';
+        throw new Error(typeof msg === 'string' ? msg : 'Failed to load competitor videos');
+      }
+      const fromResponse = sanitizeCompetitorVideos(data.competitor_videos || data.items || data.videos || data);
+      if (fromResponse.length === 0) throw new Error('No competitor videos available for duplicate check.');
+      return fromResponse;
+    }
+
+    async function checkCompetitorDuplicate() {
+      const sentenceMatch = (lastResult && lastResult.sentence_match) ? String(lastResult.sentence_match).trim() : '';
+      if (!sentenceMatch) return { duplicate: false, message: '' };
+      const transcriptText = (lastResult && lastResult.transcript_text) ? String(lastResult.transcript_text) : '';
+      const competitorVideos = await getCompetitorVideos();
+      const payload = {
+        transcript_text: transcriptText,
+        competitor_videos: competitorVideos,
+        text: sentenceMatch,
+        sentence_match: sentenceMatch,
+        translated_title: (lastResult && lastResult.translated_title) || '',
+        video_url: currentVideoUrl || '',
+      };
+      const res = await fetch(`${BACKEND_URL}/api/integration/check-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data.detail || data.message || res.statusText || 'Duplicate check failed';
+        throw new Error(typeof msg === 'string' ? msg : 'Duplicate check failed');
+      }
+      return normalizeDuplicateCheckResult(data);
+    }
+
     async function doCreateTrelloCard(forceNewFolder) {
       if (!lastResult || !currentVideoUrl) {
         apiErrorEl.textContent = 'Process a video first before creating a Trello card.';
@@ -794,7 +964,18 @@
           });
         }
 
-        // 1) Optional dry-run to check if folder already exists (no Trello card created yet).
+        // 1) Check competitor duplicates before Trello creation.
+        const duplicateCheck = await checkCompetitorDuplicate();
+        if (duplicateCheck.duplicate) {
+          const ok = await askDuplicateOverride(duplicateCheck.message);
+          if (!ok) {
+            apiErrorEl.textContent = 'Trello creation canceled because a potential duplicate was detected.';
+            apiErrorEl.style.display = 'block';
+            return;
+          }
+        }
+
+        // 2) Optional dry-run to check if folder already exists (no Trello card created yet).
         if (!forceNewFolder) {
           const checkPayload = {
             video_url: currentVideoUrl,
@@ -827,7 +1008,7 @@
           }
         }
 
-        // 2) Actual Trello card creation (only runs once).
+        // 3) Actual Trello card creation (only runs once).
         if (createTrelloBtn) {
           createTrelloBtn.disabled = true;
           originalText = createTrelloBtn.textContent;

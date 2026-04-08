@@ -138,4 +138,5 @@ async def process_video(body: ProcessRequest) -> dict:
         "tts_text": tts_text or "",
         "credits": credits,
         "source": source,
+        "transcript_text": transcript_text,
     }
