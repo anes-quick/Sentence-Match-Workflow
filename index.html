@@ -821,7 +821,9 @@
           duplicateConfirmDetails.innerHTML = matches.slice(0, 5).map((m) => {
             const title = (m.title || 'Untitled').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const channel = (m.channel_name || m.channel || 'Unknown channel').toString().replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const link = (m.url || m.video_url || m.link || '').toString().trim();
+            const rawLink = (m.url || m.video_url || m.link || '').toString().trim();
+            const videoId = (m.video_id || m.videoId || '').toString().trim();
+            const link = rawLink || (videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}` : '');
             const safeLink = link.replace(/"/g, '&quot;');
             const linkHtml = safeLink
               ? `<a href="${safeLink}" target="_blank" rel="noopener noreferrer">${safeLink}</a>`
