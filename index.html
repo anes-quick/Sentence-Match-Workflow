@@ -277,6 +277,7 @@
     const BACKEND_URL = (!window.location.hostname || /localhost|127\.0\.0\.1/.test(window.location.hostname))
       ? 'http://localhost:8001'
       : 'https://sentence-match-workflow-production.up.railway.app';
+    const DEFAULT_COMPETITOR_BACKEND_URL = 'https://competitor-upload-checker-production.up.railway.app';
     const COMPETITOR_BACKEND_URL = (() => {
       try {
         const qs = new URLSearchParams(window.location.search || '');
@@ -290,10 +291,10 @@
           (window.COMPETITOR_BACKEND_URL && String(window.COMPETITOR_BACKEND_URL)) ||
           fromQuery ||
           fromStorage ||
-          BACKEND_URL
+          DEFAULT_COMPETITOR_BACKEND_URL
         ).replace(/\/+$/, '');
       } catch (_) {
-        return BACKEND_URL;
+        return DEFAULT_COMPETITOR_BACKEND_URL;
       }
     })();
     const statusEl = document.getElementById('status');
