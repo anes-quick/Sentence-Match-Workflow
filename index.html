@@ -279,7 +279,19 @@
       : 'https://sentence-match-workflow-production.up.railway.app';
     const COMPETITOR_BACKEND_URL = (() => {
       try {
-        return ((window.COMPETITOR_BACKEND_URL && String(window.COMPETITOR_BACKEND_URL)) || BACKEND_URL).replace(/\/+$/, '');
+        const qs = new URLSearchParams(window.location.search || '');
+        const fromQuery = qs.get('competitor_backend_url') || qs.get('competitorBackendUrl') || '';
+        const fromStorage =
+          localStorage.getItem('competitor-backend-url') ||
+          localStorage.getItem('competitor_checker_backend_url') ||
+          localStorage.getItem('competitor-upload-checker-backend-url') ||
+          '';
+        return (
+          (window.COMPETITOR_BACKEND_URL && String(window.COMPETITOR_BACKEND_URL)) ||
+          fromQuery ||
+          fromStorage ||
+          BACKEND_URL
+        ).replace(/\/+$/, '');
       } catch (_) {
         return BACKEND_URL;
       }
@@ -1005,6 +1017,9 @@
           headers: { 'Content-Type': 'application/json' },
         });
         const cacheData = await cacheRes.json().catch(() => ({}));
+        if (res.status === 404 && cacheRes.status === 404) {
+          throw new Error('Competitor backend URL is not configured for Sentence Match Workflow. Set window.COMPETITOR_BACKEND_URL or localStorage["competitor-backend-url"].');
+        }
         if (!cacheRes.ok) {
           const msg = cacheData.detail || cacheData.message || cacheRes.statusText || 'Failed to fetch competitor transcript cache.';
           throw new Error(typeof msg === 'string' ? msg : 'Failed to fetch competitor transcript cache.');
