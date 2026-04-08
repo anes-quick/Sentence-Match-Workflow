@@ -458,46 +458,26 @@
     function renderDuplicateInlineWarning() {
       const el = document.getElementById('duplicateInlineWarning');
       if (!el) return;
-      if (duplicateCheck.status === 'idle') {
+      // UX rule: only show inline banner when a real duplicate is found.
+      if (duplicateCheck.status !== 'success' || !duplicateCheck.duplicate) {
         el.classList.remove('show');
         el.innerHTML = '';
         return;
       }
-      if (duplicateCheck.status === 'running') {
-        el.classList.add('show');
-        el.style.borderColor = 'var(--border)';
-        el.style.background = 'rgba(255,255,255,0.03)';
-        el.innerHTML = '<div class="title">Checking for duplicate uploads...</div>';
-        return;
-      }
-      if (duplicateCheck.status === 'error') {
-        el.classList.add('show');
-        el.style.borderColor = 'rgba(248,113,113,0.5)';
-        el.style.background = 'rgba(248,113,113,0.1)';
-        el.innerHTML = '<div class="title">Duplicate check failed</div><div>' + escapeHtml(duplicateCheck.message || 'Could not verify duplicates.') + '</div>';
-        return;
-      }
-      if (duplicateCheck.duplicate) {
-        const matches = Array.isArray(duplicateCheck.matches) ? duplicateCheck.matches.slice(0, 5) : [];
-        const matchesHtml = matches.map((m) => {
-          const title = escapeHtml(m.title || 'Untitled');
-          const channel = escapeHtml(m.channel_name || m.channel || 'Unknown channel');
-          const link = escapeHtml(m.url || '');
-          const linkHtml = link ? `<a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a>` : 'No link available';
-          return `<div class="match"><strong>${title}</strong><div class="meta">${channel}</div><div>${linkHtml}</div></div>`;
-        }).join('');
-        el.classList.add('show');
-        el.style.borderColor = 'rgba(248,113,113,0.5)';
-        el.style.background = 'rgba(248,113,113,0.1)';
-        el.innerHTML = '<div class="title">Already uploaded: possible duplicate detected</div>'
-          + (matchesHtml || '<div>' + escapeHtml(duplicateCheck.message || 'Potential duplicate detected.') + '</div>')
-          + '<div class="meta">Trello creation will require explicit override.</div>';
-        return;
-      }
+      const matches = Array.isArray(duplicateCheck.matches) ? duplicateCheck.matches.slice(0, 5) : [];
+      const matchesHtml = matches.map((m) => {
+        const title = escapeHtml(m.title || 'Untitled');
+        const channel = escapeHtml(m.channel_name || m.channel || 'Unknown channel');
+        const link = escapeHtml(m.url || '');
+        const linkHtml = link ? `<a href="${link}" target="_blank" rel="noopener noreferrer">${link}</a>` : 'No link available';
+        return `<div class="match"><strong>${title}</strong><div class="meta">${channel}</div><div>${linkHtml}</div></div>`;
+      }).join('');
       el.classList.add('show');
-      el.style.borderColor = 'rgba(74,222,128,0.45)';
-      el.style.background = 'rgba(74,222,128,0.08)';
-      el.innerHTML = '<div class="title">No duplicate detected</div><div class="meta">Checked just now.</div>';
+      el.style.borderColor = 'rgba(248,113,113,0.5)';
+      el.style.background = 'rgba(248,113,113,0.1)';
+      el.innerHTML = '<div class="title">Already uploaded: possible duplicate detected</div>'
+        + (matchesHtml || '<div>' + escapeHtml(duplicateCheck.message || 'Potential duplicate detected.') + '</div>')
+        + '<div class="meta">Trello creation will require explicit override.</div>';
     }
 
     function setVoiceoverState(state) {
@@ -1012,11 +992,31 @@
         headers: { 'Content-Type': 'application/json' },
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      if (!res.ok && res.status !== 404) {
         const msg = data.detail || data.message || res.statusText || 'Failed to fetch competitor videos.';
         throw new Error(typeof msg === 'string' ? msg : 'Failed to fetch competitor videos.');
       }
-      const list = sanitizeCompetitorVideos(data.competitor_videos || data.items || data.videos || data);
+      let list = [];
+      if (res.ok) list = sanitizeCompetitorVideos(data.competitor_videos || data.items || data.videos || data);
+      if (!list.length) {
+        // Fallback: competitor checker already exposes transcript cache entries.
+        const cacheRes = await fetch(`${COMPETITOR_BACKEND_URL}/api/transcripts/cache`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const cacheData = await cacheRes.json().catch(() => ({}));
+        if (!cacheRes.ok) {
+          const msg = cacheData.detail || cacheData.message || cacheRes.statusText || 'Failed to fetch competitor transcript cache.';
+          throw new Error(typeof msg === 'string' ? msg : 'Failed to fetch competitor transcript cache.');
+        }
+        const rows = Array.isArray(cacheData) ? cacheData : (Array.isArray(cacheData.items) ? cacheData.items : []);
+        list = sanitizeCompetitorVideos(rows.map((row) => ({
+          video_id: row.video_id || row.videoId || row.id || '',
+          channel_name: row.channel_name || row.channel || row.channelTitle || '',
+          title: row.title || row.video_title || '',
+          channel_id: row.channel_id || row.channelId || '',
+        })));
+      }
       if (!list.length) throw new Error('Competitor video list is empty or invalid.');
       return list;
     }
