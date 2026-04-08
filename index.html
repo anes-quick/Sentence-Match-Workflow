@@ -127,6 +127,9 @@
     .duplicate-inline-warning .meta { color: var(--muted); font-size: 0.78rem; margin-top: 0.35rem; }
     .duplicate-inline-warning .match { margin-top: 0.45rem; }
     .duplicate-inline-warning .match a { color: var(--accent); word-break: break-all; }
+    .prepped-inline-warning { border: 1px solid rgba(248,113,113,0.5); background: rgba(248,113,113,0.1); border-radius: 8px; padding: 0.7rem 0.8rem; margin-bottom: 1rem; font-size: 0.85rem; display: none; }
+    .prepped-inline-warning.show { display: block; }
+    .prepped-inline-warning .title { font-weight: 600; margin-bottom: 0.35rem; }
   </style>
 </head>
 <body>
@@ -156,6 +159,7 @@
         <button type="button" class="btn btn-primary" id="processBtn">Process</button>
       </div>
       <p id="apiError" class="error" style="display: none;"></p>
+      <div id="preppedInlineWarning" class="prepped-inline-warning" aria-live="polite"></div>
       <div id="duplicateInlineWarning" class="duplicate-inline-warning" aria-live="polite"></div>
 
       <div id="results">
@@ -308,6 +312,7 @@
     const VOICEOVER_STORAGE_KEY = 'sentence-match-voiceovers';
     const VOICE_STORAGE_KEY = 'sentence-match-voice';
     const TRELLO_PREFS_STORAGE_KEY = 'sentence-match-trello-prefs';
+    const PREPPED_VIDEO_IDS_STORAGE_KEY = 'sentence-match-prepped-video-ids';
     const TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
     let lastResult = null;
@@ -320,6 +325,7 @@
     let selectedVoiceLabel = 'Fast MF';
     let trelloChannel = '';
     let trelloVideoNumber = '';
+    let preppedVideoIds = new Set();
     let duplicateCheck = { status: 'idle', duplicate: false, matches: [], message: '', checkedAt: null };
     let duplicateCheckPromise = null;
     const DUPLICATE_CHECK_STALE_MS = 10 * 60 * 1000;
@@ -683,6 +689,62 @@
       } catch (_) {}
     }
 
+    function loadPreppedVideoIds() {
+      const storage = getStorage();
+      if (!storage) return new Set();
+      try {
+        const raw = storage.getItem(PREPPED_VIDEO_IDS_STORAGE_KEY);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return new Set();
+        return new Set(parsed.map((x) => String(x || '').trim()).filter(Boolean));
+      } catch (_) {
+        return new Set();
+      }
+    }
+
+    function savePreppedVideoIds() {
+      const storage = getStorage();
+      if (!storage) return;
+      try {
+        storage.setItem(PREPPED_VIDEO_IDS_STORAGE_KEY, JSON.stringify(Array.from(preppedVideoIds)));
+      } catch (_) {}
+    }
+
+    function extractInputVideoId(input) {
+      const raw = (input || '').trim();
+      if (!raw) return '';
+      if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return raw;
+      try {
+        const u = new URL(raw);
+        const host = (u.hostname || '').toLowerCase();
+        if (host.includes('youtu.be')) {
+          const id = (u.pathname || '').split('/').filter(Boolean)[0] || '';
+          if (/^[A-Za-z0-9_-]{11}$/.test(id)) return id;
+        }
+        const v = (u.searchParams.get('v') || '').trim();
+        if (/^[A-Za-z0-9_-]{11}$/.test(v)) return v;
+        const shorts = (u.pathname || '').match(/\/shorts\/([A-Za-z0-9_-]{11})/);
+        if (shorts && shorts[1]) return shorts[1];
+      } catch (_) {}
+      const m = raw.match(/(?:v=|\/shorts\/|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+      return (m && m[1]) ? m[1] : '';
+    }
+
+    function showPreppedWarning(videoId) {
+      const el = document.getElementById('preppedInlineWarning');
+      if (!el) return;
+      el.classList.add('show');
+      el.innerHTML = '<div class="title">This video was already prepped</div><div>Video ID: ' + escapeHtml(videoId) + '</div>';
+    }
+
+    function hidePreppedWarning() {
+      const el = document.getElementById('preppedInlineWarning');
+      if (!el) return;
+      el.classList.remove('show');
+      el.innerHTML = '';
+    }
+
     function saveTrelloPrefs() {
       const storage = getStorage();
       if (!storage) return;
@@ -722,6 +784,12 @@
         apiErrorEl.style.display = 'block';
         return;
       }
+      const currentInputVideoId = extractInputVideoId(url);
+      if (currentInputVideoId && preppedVideoIds.has(currentInputVideoId)) {
+        showPreppedWarning(currentInputVideoId);
+      } else {
+        hidePreppedWarning();
+      }
       apiErrorEl.style.display = 'none';
       apiErrorEl.textContent = '';
       duplicateCheck = { status: 'idle', duplicate: false, matches: [], message: '', checkedAt: null };
@@ -741,6 +809,10 @@
           return;
         }
         addToHistory(data, url);
+        if (currentInputVideoId) {
+          preppedVideoIds.add(currentInputVideoId);
+          savePreppedVideoIds();
+        }
         if ((data.tts_text || '').trim()) fetchAndShowVoiceover(data.tts_text);
         runDuplicateCheckEarly(true);
       } finally {
@@ -1306,6 +1378,7 @@
 
     // Restore history from localStorage (6h TTL)
     history = loadHistory();
+    preppedVideoIds = loadPreppedVideoIds();
     loadSavedVoice();
     loadTrelloPrefs();
     applyVoiceSelection();
