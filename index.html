@@ -312,7 +312,7 @@
     const VOICEOVER_STORAGE_KEY = 'sentence-match-voiceovers';
     const VOICE_STORAGE_KEY = 'sentence-match-voice';
     const TRELLO_PREFS_STORAGE_KEY = 'sentence-match-trello-prefs';
-    const PREPPED_VIDEO_IDS_STORAGE_KEY = 'sentence-match-prepped-video-ids';
+    const PREPPED_VIDEO_IDS_STORAGE_KEY = 'sentence-match-prepped-video-ids-v2';
     const TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
     let lastResult = null;
@@ -496,7 +496,7 @@
       el.style.background = 'rgba(248,113,113,0.1)';
       el.innerHTML = '<div class="title">Already uploaded: possible duplicate detected</div>'
         + (matchesHtml || '<div>' + escapeHtml(duplicateCheck.message || 'Potential duplicate detected.') + '</div>')
-        + '<div class="meta">Trello creation will require explicit override.</div>';
+        + '<div class="meta">Informational only — you can still create a Trello card.</div>';
     }
 
     function setVoiceoverState(state) {
@@ -697,7 +697,11 @@
         if (!raw) return new Set();
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) return new Set();
-        return new Set(parsed.map((x) => String(x || '').trim()).filter(Boolean));
+        return new Set(
+          parsed
+            .map((x) => String(x || '').trim())
+            .filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id)),
+        );
       } catch (_) {
         return new Set();
       }
@@ -1243,27 +1247,9 @@
           });
         }
 
-        // 1) Use early duplicate check result (rerun only if stale).
+        // 1) Best-effort duplicate check (notify only — never block Trello creation).
         if (duplicateCheck.status === 'running') await (duplicateCheckPromise || runDuplicateCheckEarly(false));
         if (duplicateCheck.status === 'idle' || isDuplicateCheckStale()) await runDuplicateCheckEarly(true);
-        if (duplicateCheck.status === 'error') {
-          apiErrorEl.textContent = duplicateCheck.message || 'Duplicate check failed; cannot create Trello card.';
-          apiErrorEl.style.display = 'block';
-          return;
-        }
-        if (duplicateCheck.status !== 'success') {
-          apiErrorEl.textContent = 'Duplicate check did not complete; cannot create Trello card.';
-          apiErrorEl.style.display = 'block';
-          return;
-        }
-        if (duplicateCheck.duplicate) {
-          const ok = await askDuplicateOverride(duplicateCheck);
-          if (!ok) {
-            apiErrorEl.textContent = 'Trello creation canceled because a potential duplicate was detected.';
-            apiErrorEl.style.display = 'block';
-            return;
-          }
-        }
 
         // 2) Optional dry-run to check if folder already exists (no Trello card created yet).
         if (!forceNewFolder) {
