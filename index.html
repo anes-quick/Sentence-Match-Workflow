@@ -56,6 +56,9 @@
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
     .card-title { font-size: 0.85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .card-content { font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
+    .tts-card { display: flex; flex-direction: column; }
+    .tts-card .card-content { flex: 1; min-height: 0; }
+    .tts-card-footer { display: flex; justify-content: flex-end; margin-top: 0.5rem; padding-top: 0.45rem; border-top: 1px solid var(--border); }
     .card-content.empty { color: var(--muted); font-style: italic; }
     .card.loading .card-content { position: relative; overflow: hidden !important; }
     .card.loading .card-content::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent); animation: shimmer 1.2s infinite; pointer-events: none; }
@@ -192,12 +195,15 @@
           </div>
           <div class="card-content scroll-dark empty" id="out-sentence_match">—</div>
         </div>
-        <div class="card">
+        <div class="card tts-card">
           <div class="card-header">
             <span class="card-title">TTS text</span>
             <button type="button" class="btn btn-copy" data-copy="tts_text">Copy</button>
           </div>
           <div class="card-content scroll-dark empty" id="out-tts_text">—</div>
+          <div class="tts-card-footer">
+            <button type="button" class="btn btn-copy" id="ttsCleanCopyBtn" title="Copy without [speak fast] prefixes">Clean copy</button>
+          </div>
         </div>
         <div class="card voiceover-card" id="voiceoverCard">
           <div class="card-header">
@@ -483,6 +489,16 @@
 
     function escapeHtml(value) {
       return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function stripTtsSpeakFastPrefixes(text) {
+      return String(text || '')
+        .split('\n')
+        .map(function (line) {
+          return line.replace(/^\s*\[speak fast\]\s*/i, '');
+        })
+        .join('\n')
+        .replace(/\n+$/, '');
     }
 
     function isDuplicateCheckStale() {
@@ -921,6 +937,20 @@
         });
       });
     });
+
+    const ttsCleanCopyBtn = document.getElementById('ttsCleanCopyBtn');
+    if (ttsCleanCopyBtn) {
+      ttsCleanCopyBtn.addEventListener('click', () => {
+        const raw = (lastResult && lastResult.tts_text) ? String(lastResult.tts_text) : (document.getElementById('out-tts_text') || {}).textContent || '';
+        if (!raw.trim() || raw.trim() === '—') return;
+        const cleaned = stripTtsSpeakFastPrefixes(raw);
+        navigator.clipboard.writeText(cleaned).then(() => {
+          const t = ttsCleanCopyBtn.textContent;
+          ttsCleanCopyBtn.textContent = 'Copied!';
+          setTimeout(() => { ttsCleanCopyBtn.textContent = t; }, 1500);
+        });
+      });
+    }
 
     const voiceoverAudio = document.getElementById('voiceoverAudio');
     const voiceoverPlayBtn = document.getElementById('voiceoverPlayBtn');
