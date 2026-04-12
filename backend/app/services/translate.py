@@ -46,7 +46,7 @@ def translate_transcript(
 ) -> tuple[str, str, str]:
     """
     Call Claude to produce title, sentence-match script, and TTS script.
-    target_language: "german" (EN+DE sentence match, DE TTS) or "english" (EN only, EN TTS).
+    target_language: "german" (EN+DE sentence match, DE TTS) or "english" (source+EN sentence match, EN TTS).
     Returns (translated_title, sentence_match_markdown, tts_text).
     """
     api_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
@@ -69,7 +69,7 @@ def translate_transcript(
 TRANSCRIPT (may be in any language):
 {transcript_text}
 
-Generate the English title, OUTPUT 1 (sentence-match: English only), and OUTPUT 2 (English TTS script) as specified. Translate all non-English content to English. Output ONLY the three code blocks, nothing else."""
+Generate the English title, OUTPUT 1 (sentence-match: original transcript language + English, line pairs), and OUTPUT 2 (English TTS script) as specified. Output ONLY the three code blocks, nothing else."""
     else:
         system_prompt_file = (
             (os.environ.get("TRANSLATION_SYSTEM_PROMPT_FILE") or "").strip()

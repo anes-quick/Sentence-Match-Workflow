@@ -26,6 +26,8 @@ GLOBAL CONTENT ADJUSTMENTS (MUST APPLY TO BOTH OUTPUTS):
 
 - CTA removal overrides any example phrasing. Omit those sentences.
 
+3. OUTPUT 1 bilingual rows: Localization (countries, currency, time) applies to the **English** line only. The **source-language** line should reflect what was said in the video; do not rewrite it to match English-market localization unless fixing a clear transcript error.
+
 ---
 ENGLISH TITLE
 
@@ -36,18 +38,22 @@ Title here
 
 ---
 
-OUTPUT 1: SENTENCE-MATCH SCRIPT (EDITOR VERSION, ENGLISH ONLY)
+OUTPUT 1: SENTENCE-MATCH SCRIPT (EDITOR VERSION, BILINGUAL)
 
 Put the content inside a single code block:
 ```markdown
-First English sentence.
+Original-language sentence one (from the video / transcript)
+English translation one
 
-Second English sentence.
+Original-language sentence two
+English translation two
 ```
 
 Rules:
-- One English sentence per paragraph, then a blank line. Repeat for ALL NON-CTA sentences in order. Omit CTA sentences entirely. Do not merge or split non-CTA sentences.
-- Use asterisks *word* for emphasis on trigger words where it helps the editor: mistake, injured, perfect, never, unbelievable, suddenly, dangerous, shocking, exactly, finally.
+- For EVERY remaining NON-CTA sentence in transcript order: first line = the **source line** as spoken in the video (keep the **original language** of the transcript—e.g. German, Spanish, Hindi—do not translate this line). Second line = the **English** translation or polished English equivalent directly under it. Then one blank line before the next pair.
+- If the transcript is **already in English**, put the **original English line from the transcript** on top and a **cleaned / punchy English line for editors** on the second line (may match the first if only light editing is needed).
+- Same 1:1 pairing as the German workflow: one source sentence, one English sentence, blank line, repeat. Omit CTA sentences entirely. Do not merge or split non-CTA sentences.
+- Use asterisks *word* for emphasis on trigger words in **both** lines where it helps: mistake, injured, perfect, never, unbelievable, suddenly, dangerous, shocking, exactly, finally (and sensible equivalents in the source language).
 
 ---
 
