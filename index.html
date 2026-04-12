@@ -12,7 +12,7 @@
     header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
     .main-title-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
     .main-title-row h1 { margin: 0; flex: 1; min-width: 0; }
-    .header-controls { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+    .header-controls { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; white-space: nowrap; }
     .header-voice-wrap, .header-lang-wrap { position: relative; }
     .voice-dropdown-btn { padding: 0.4rem 0.75rem; font-size: 0.85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 0.35rem; }
     .voice-dropdown-btn:hover { border-color: var(--muted); }
@@ -25,6 +25,11 @@
     .voice-option.voice-fastmf { border-left-color: #e8ff47; }
     .voice-option.voice-helmut { border-left-color: #22d3ee; }
     .voice-option.voice-lars { border-left-color: #fb923c; }
+    @media (max-width: 720px) {
+      .main-title-row { align-items: flex-start; }
+      .main-title-row h1 { flex: 1 1 100%; width: 100%; }
+      .header-controls { margin-top: 0.35rem; white-space: normal; flex-wrap: wrap; }
+    }
     .layout { display: flex; gap: 1.5rem; padding: 1.5rem; max-width: 1200px; margin: 0 auto; min-height: calc(100vh - 52px); }
     .main { flex: 1; min-width: 0; }
     .history-sidebar { width: 220px; flex-shrink: 0; border-left: 1px solid var(--border); padding-left: 1rem; }
@@ -146,7 +151,7 @@
         <h1>Sentence Match Workflow</h1>
         <div class="header-controls">
           <div class="header-lang-wrap">
-            <button type="button" class="voice-dropdown-btn" id="langDropdownBtn" aria-haspopup="true" aria-expanded="false">Language</button>
+            <button type="button" class="voice-dropdown-btn" id="langDropdownBtn" aria-haspopup="true" aria-expanded="false" aria-label="Output language">Language</button>
             <div class="voice-dropdown-menu" id="langDropdownMenu" role="menu">
               <button type="button" class="voice-option voice-fastmf" role="menuitem" data-lang="german" data-lang-label="German">German</button>
               <button type="button" class="voice-option voice-helmut" role="menuitem" data-lang="english" data-lang-label="English">English</button>
