@@ -41,25 +41,46 @@ def _parse_code_blocks(response: str) -> tuple[str, str, str]:
 def translate_transcript(
     transcript_text: str,
     video_title: str,
+    *,
+    target_language: str = "german",
 ) -> tuple[str, str, str]:
     """
-    Call Claude to produce German title, sentence-match script, and TTS script.
+    Call Claude to produce title, sentence-match script, and TTS script.
+    target_language: "german" (EN+DE sentence match, DE TTS) or "english" (EN only, EN TTS).
     Returns (translated_title, sentence_match_markdown, tts_text).
     """
     api_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
     if not api_key:
         raise ValueError("ANTHROPIC_API_KEY is not set")
 
-    system_prompt_file = (
-        (os.environ.get("TRANSLATION_SYSTEM_PROMPT_FILE") or "").strip()
-        or "translation_system.txt"
-    )
-    system = _load_prompt(system_prompt_file)
-    examples = _load_prompt("german_style_examples.txt")
-    if examples:
-        system += "\n\n---\n\nGerman style examples:\n\n" + examples
+    lang = (target_language or "german").strip().lower()
+    if lang not in ("german", "english"):
+        lang = "german"
 
-    user = f"""VIDEO TITLE:
+    if lang == "english":
+        system_prompt_file = (
+            (os.environ.get("TRANSLATION_SYSTEM_PROMPT_FILE_EN") or "").strip()
+            or "translation_system_en.txt"
+        )
+        system = _load_prompt(system_prompt_file)
+        user = f"""VIDEO TITLE:
+{video_title}
+
+TRANSCRIPT (may be in any language):
+{transcript_text}
+
+Generate the English title, OUTPUT 1 (sentence-match: English only), and OUTPUT 2 (English TTS script) as specified. Translate all non-English content to English. Output ONLY the three code blocks, nothing else."""
+    else:
+        system_prompt_file = (
+            (os.environ.get("TRANSLATION_SYSTEM_PROMPT_FILE") or "").strip()
+            or "translation_system.txt"
+        )
+        system = _load_prompt(system_prompt_file)
+        examples = _load_prompt("german_style_examples.txt")
+        if examples:
+            system += "\n\n---\n\nGerman style examples:\n\n" + examples
+
+        user = f"""VIDEO TITLE:
 {video_title}
 
 TRANSCRIPT (may be in any language):

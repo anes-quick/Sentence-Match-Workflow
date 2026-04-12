@@ -5,10 +5,12 @@ from fastapi import APIRouter
 from .process import router as process_router
 from .voiceover import router as voiceover_router
 from .trello import router as trello_router
+from .prepped import router as prepped_router
 
 router = APIRouter()
 router.include_router(process_router)
 router.include_router(voiceover_router)
+router.include_router(prepped_router)
 
 # Optional Trello module – only enable routes when configured.
 if (

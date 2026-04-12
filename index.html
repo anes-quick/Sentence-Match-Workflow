@@ -10,9 +10,10 @@
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
     header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-    .main-title-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
-    .main-title-row h1 { margin: 0; }
-    .header-voice-wrap { position: relative; }
+    .main-title-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .main-title-row h1 { margin: 0; flex: 1; min-width: 0; }
+    .header-controls { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+    .header-voice-wrap, .header-lang-wrap { position: relative; }
     .voice-dropdown-btn { padding: 0.4rem 0.75rem; font-size: 0.85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 0.35rem; }
     .voice-dropdown-btn:hover { border-color: var(--muted); }
     .voice-dropdown-btn::after { content: '▾'; font-size: 0.7rem; color: var(--muted); }
@@ -143,12 +144,21 @@
     <main class="main">
       <div class="main-title-row">
         <h1>Sentence Match Workflow</h1>
-        <div class="header-voice-wrap">
-          <button type="button" class="voice-dropdown-btn" id="voiceDropdownBtn" aria-haspopup="true" aria-expanded="false">Voice</button>
-          <div class="voice-dropdown-menu" id="voiceDropdownMenu" role="menu">
-            <button type="button" class="voice-option voice-fastmf" role="menuitem" data-voice-key="fast_mf" data-voice-label="Fast MF">Fast MF</button>
-            <button type="button" class="voice-option voice-helmut" role="menuitem" data-voice-key="helmut" data-voice-label="Helmut">Helmut</button>
-            <button type="button" class="voice-option voice-lars" role="menuitem" data-voice-key="lars" data-voice-label="Lars">Lars</button>
+        <div class="header-controls">
+          <div class="header-lang-wrap">
+            <button type="button" class="voice-dropdown-btn" id="langDropdownBtn" aria-haspopup="true" aria-expanded="false">Language</button>
+            <div class="voice-dropdown-menu" id="langDropdownMenu" role="menu">
+              <button type="button" class="voice-option voice-fastmf" role="menuitem" data-lang="german" data-lang-label="German">German</button>
+              <button type="button" class="voice-option voice-helmut" role="menuitem" data-lang="english" data-lang-label="English">English</button>
+            </div>
+          </div>
+          <div class="header-voice-wrap">
+            <button type="button" class="voice-dropdown-btn" id="voiceDropdownBtn" aria-haspopup="true" aria-expanded="false">Voice</button>
+            <div class="voice-dropdown-menu" id="voiceDropdownMenu" role="menu">
+              <button type="button" class="voice-option voice-fastmf" role="menuitem" data-voice-key="fast_mf" data-voice-label="Fast MF">Fast MF</button>
+              <button type="button" class="voice-option voice-helmut" role="menuitem" data-voice-key="helmut" data-voice-label="Helmut">Helmut</button>
+              <button type="button" class="voice-option voice-lars" role="menuitem" data-voice-key="lars" data-voice-label="Lars">Lars</button>
+            </div>
           </div>
         </div>
       </div>
@@ -166,7 +176,7 @@
         <div class="card title-card">
           <div class="card-header">
             <span class="card-title">Title</span>
-            <button type="button" class="btn btn-copy" id="copyTranslatedTitle" title="Copy German title">Copy (DE)</button>
+            <button type="button" class="btn btn-copy" id="copyTranslatedTitle" title="Copy title">Copy (DE)</button>
           </div>
           <div class="card-content" id="out-translated_title">—</div>
         </div>
@@ -312,7 +322,7 @@
     const VOICEOVER_STORAGE_KEY = 'sentence-match-voiceovers';
     const VOICE_STORAGE_KEY = 'sentence-match-voice';
     const TRELLO_PREFS_STORAGE_KEY = 'sentence-match-trello-prefs';
-    const PREPPED_VIDEO_IDS_STORAGE_KEY = 'sentence-match-prepped-video-ids-v2';
+    const OUTPUT_LANG_STORAGE_KEY = 'sentence-match-output-language';
     const TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
     let lastResult = null;
@@ -323,9 +333,10 @@
     let currentVoiceoverBlob = null;
     let selectedVoiceKey = 'fast_mf';
     let selectedVoiceLabel = 'Fast MF';
+    let selectedOutputLang = 'german';
+    let selectedOutputLangLabel = 'German';
     let trelloChannel = '';
     let trelloVideoNumber = '';
-    let preppedVideoIds = new Set();
     let duplicateCheck = { status: 'idle', duplicate: false, matches: [], message: '', checkedAt: null };
     let duplicateCheckPromise = null;
     const DUPLICATE_CHECK_STALE_MS = 10 * 60 * 1000;
@@ -587,7 +598,7 @@
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
       const label = (data && data.translated_title) ? data.translated_title.trim() : '—';
       const createdAt = Date.now();
-      history.unshift({ id, data, url: videoUrl, label, createdAt });
+      history.unshift({ id, data, url: videoUrl, label, createdAt, output_language: selectedOutputLang });
       history = history.filter(isWithinTTL);
       activeHistoryId = id;
       currentVideoUrl = videoUrl;
@@ -617,6 +628,10 @@
           activeHistoryId = item.id;
           lastResult = item.data;
           currentVideoUrl = item.url || '';
+          selectedOutputLang = item.output_language === 'english' ? 'english' : 'german';
+          selectedOutputLangLabel = selectedOutputLang === 'english' ? 'English' : 'German';
+          saveOutputLanguage();
+          applyOutputLanguageUi();
           renderCards(item.data);
           duplicateCheck = { status: 'idle', duplicate: false, matches: [], message: '', checkedAt: null };
           renderDuplicateInlineWarning();
@@ -635,9 +650,8 @@
       if (!lastResult || !lastResult.translated_title) return;
       navigator.clipboard.writeText(lastResult.translated_title).then(() => {
         const btn = document.getElementById('copyTranslatedTitle');
-        const t = btn.textContent;
         btn.textContent = 'Copied!';
-        setTimeout(() => { btn.textContent = t; }, 1500);
+        setTimeout(() => { applyOutputLanguageUi(); }, 1500);
       });
     });
 
@@ -677,6 +691,47 @@
       } catch (_) {}
     }
 
+    function applyOutputLanguageUi() {
+      const btn = document.getElementById('langDropdownBtn');
+      const menu = document.getElementById('langDropdownMenu');
+      const copyTitle = document.getElementById('copyTranslatedTitle');
+      if (btn) btn.textContent = 'Language: ' + selectedOutputLangLabel;
+      if (menu) {
+        menu.querySelectorAll('[data-lang]').forEach(function (opt) {
+          opt.classList.toggle('selected', opt.getAttribute('data-lang') === selectedOutputLang);
+        });
+      }
+      if (copyTitle) {
+        copyTitle.textContent = selectedOutputLang === 'english' ? 'Copy (EN)' : 'Copy (DE)';
+        copyTitle.title = selectedOutputLang === 'english' ? 'Copy English title' : 'Copy German title';
+      }
+    }
+
+    function loadSavedOutputLanguage() {
+      const storage = getStorage();
+      if (!storage) return;
+      try {
+        const raw = storage.getItem(OUTPUT_LANG_STORAGE_KEY);
+        if (!raw) return;
+        const o = JSON.parse(raw);
+        if (o && o.lang === 'english') {
+          selectedOutputLang = 'english';
+          selectedOutputLangLabel = 'English';
+        } else if (o && o.lang === 'german') {
+          selectedOutputLang = 'german';
+          selectedOutputLangLabel = 'German';
+        }
+      } catch (_) {}
+    }
+
+    function saveOutputLanguage() {
+      const storage = getStorage();
+      if (!storage) return;
+      try {
+        storage.setItem(OUTPUT_LANG_STORAGE_KEY, JSON.stringify({ lang: selectedOutputLang }));
+      } catch (_) {}
+    }
+
     function loadTrelloPrefs() {
       const storage = getStorage();
       if (!storage) return;
@@ -686,32 +741,6 @@
         const o = JSON.parse(raw);
         if (o && typeof o.channel === 'string') trelloChannel = o.channel;
         if (o && (typeof o.videoNumber === 'string' || typeof o.videoNumber === 'number')) trelloVideoNumber = String(o.videoNumber);
-      } catch (_) {}
-    }
-
-    function loadPreppedVideoIds() {
-      const storage = getStorage();
-      if (!storage) return new Set();
-      try {
-        const raw = storage.getItem(PREPPED_VIDEO_IDS_STORAGE_KEY);
-        if (!raw) return new Set();
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return new Set();
-        return new Set(
-          parsed
-            .map((x) => String(x || '').trim())
-            .filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id)),
-        );
-      } catch (_) {
-        return new Set();
-      }
-    }
-
-    function savePreppedVideoIds() {
-      const storage = getStorage();
-      if (!storage) return;
-      try {
-        storage.setItem(PREPPED_VIDEO_IDS_STORAGE_KEY, JSON.stringify(Array.from(preppedVideoIds)));
       } catch (_) {}
     }
 
@@ -749,6 +778,34 @@
       el.innerHTML = '';
     }
 
+    async function checkPreppedVideoId(videoId) {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/prepped/check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_id: videoId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return { already_prepped: false };
+        return data || { already_prepped: false };
+      } catch (_) {
+        return { already_prepped: false };
+      }
+    }
+
+    async function markPreppedVideoId(videoId, sourceUrl) {
+      try {
+        await fetch(`${BACKEND_URL}/api/prepped/mark`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            video_id: videoId,
+            source_url: sourceUrl || '',
+          }),
+        });
+      } catch (_) {}
+    }
+
     function saveTrelloPrefs() {
       const storage = getStorage();
       if (!storage) return;
@@ -759,13 +816,20 @@
 
     const voiceDropdownBtn = document.getElementById('voiceDropdownBtn');
     const voiceDropdownMenu = document.getElementById('voiceDropdownMenu');
+    const langDropdownBtn = document.getElementById('langDropdownBtn');
+    const langDropdownMenu = document.getElementById('langDropdownMenu');
     if (voiceDropdownBtn && voiceDropdownMenu) {
       voiceDropdownBtn.addEventListener('click', function (e) {
         e.stopPropagation();
+        if (langDropdownMenu) {
+          langDropdownMenu.classList.remove('open');
+          if (langDropdownBtn) langDropdownBtn.setAttribute('aria-expanded', 'false');
+        }
         voiceDropdownMenu.classList.toggle('open');
         voiceDropdownBtn.setAttribute('aria-expanded', voiceDropdownMenu.classList.contains('open'));
       });
       voiceDropdownMenu.querySelectorAll('.voice-option').forEach(function (opt) {
+        if (!opt.getAttribute('data-voice-key')) return;
         opt.addEventListener('click', function () {
           selectedVoiceKey = opt.getAttribute('data-voice-key');
           selectedVoiceLabel = opt.getAttribute('data-voice-label');
@@ -775,11 +839,38 @@
           voiceDropdownBtn.setAttribute('aria-expanded', 'false');
         });
       });
-      document.addEventListener('click', function () {
-        voiceDropdownMenu.classList.remove('open');
-        voiceDropdownBtn.setAttribute('aria-expanded', 'false');
+    }
+    if (langDropdownBtn && langDropdownMenu) {
+      langDropdownBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (voiceDropdownMenu) {
+          voiceDropdownMenu.classList.remove('open');
+          if (voiceDropdownBtn) voiceDropdownBtn.setAttribute('aria-expanded', 'false');
+        }
+        langDropdownMenu.classList.toggle('open');
+        langDropdownBtn.setAttribute('aria-expanded', langDropdownMenu.classList.contains('open'));
+      });
+      langDropdownMenu.querySelectorAll('[data-lang]').forEach(function (opt) {
+        opt.addEventListener('click', function () {
+          selectedOutputLang = opt.getAttribute('data-lang') || 'german';
+          selectedOutputLangLabel = opt.getAttribute('data-lang-label') || 'German';
+          saveOutputLanguage();
+          applyOutputLanguageUi();
+          langDropdownMenu.classList.remove('open');
+          langDropdownBtn.setAttribute('aria-expanded', 'false');
+        });
       });
     }
+    document.addEventListener('click', function () {
+      if (voiceDropdownMenu) {
+        voiceDropdownMenu.classList.remove('open');
+        if (voiceDropdownBtn) voiceDropdownBtn.setAttribute('aria-expanded', 'false');
+      }
+      if (langDropdownMenu) {
+        langDropdownMenu.classList.remove('open');
+        if (langDropdownBtn) langDropdownBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
 
     processBtn.addEventListener('click', async () => {
       const url = videoUrlEl.value.trim();
@@ -789,8 +880,13 @@
         return;
       }
       const currentInputVideoId = extractInputVideoId(url);
-      if (currentInputVideoId && preppedVideoIds.has(currentInputVideoId)) {
-        showPreppedWarning(currentInputVideoId);
+      if (currentInputVideoId) {
+        const preppedStatus = await checkPreppedVideoId(currentInputVideoId);
+        if (preppedStatus && preppedStatus.already_prepped) {
+          showPreppedWarning(currentInputVideoId);
+        } else {
+          hidePreppedWarning();
+        }
       } else {
         hidePreppedWarning();
       }
@@ -804,7 +900,7 @@
         const res = await fetch(`${BACKEND_URL}/api/process`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ video_url: url }),
+          body: JSON.stringify({ video_url: url, output_language: selectedOutputLang }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -814,8 +910,7 @@
         }
         addToHistory(data, url);
         if (currentInputVideoId) {
-          preppedVideoIds.add(currentInputVideoId);
-          savePreppedVideoIds();
+          markPreppedVideoId(currentInputVideoId, url);
         }
         if ((data.tts_text || '').trim()) fetchAndShowVoiceover(data.tts_text);
         runDuplicateCheckEarly(true);
@@ -1364,9 +1459,14 @@
 
     // Restore history from localStorage (6h TTL)
     history = loadHistory();
-    preppedVideoIds = loadPreppedVideoIds();
     loadSavedVoice();
+    loadSavedOutputLanguage();
     loadTrelloPrefs();
+    if (history.length > 0 && history[0].output_language) {
+      selectedOutputLang = history[0].output_language === 'english' ? 'english' : 'german';
+      selectedOutputLangLabel = selectedOutputLang === 'english' ? 'English' : 'German';
+    }
+    applyOutputLanguageUi();
     applyVoiceSelection();
     if (history.length > 0) {
       lastResult = history[0].data;

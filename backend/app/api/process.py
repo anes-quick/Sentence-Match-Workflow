@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/process", tags=["process"])
 
 class ProcessRequest(BaseModel):
     video_url: str
+    output_language: Literal["german", "english"] = "german"
 
 
 def _build_transcript_text(transcript: dict) -> str:
@@ -116,6 +118,7 @@ async def process_video(body: ProcessRequest) -> dict:
             translate_service.translate_transcript,
             transcript_text,
             original_title,
+            target_language=body.output_language,
         )
     except ValueError as e:
         if "ANTHROPIC_API_KEY" in str(e):
