@@ -712,23 +712,6 @@
       }
     }
 
-    function loadSavedOutputLanguage() {
-      const storage = getStorage();
-      if (!storage) return;
-      try {
-        const raw = storage.getItem(OUTPUT_LANG_STORAGE_KEY);
-        if (!raw) return;
-        const o = JSON.parse(raw);
-        if (o && o.lang === 'english') {
-          selectedOutputLang = 'english';
-          selectedOutputLangLabel = 'English';
-        } else if (o && o.lang === 'german') {
-          selectedOutputLang = 'german';
-          selectedOutputLangLabel = 'German';
-        }
-      } catch (_) {}
-    }
-
     function saveOutputLanguage() {
       const storage = getStorage();
       if (!storage) return;
@@ -1347,9 +1330,13 @@
           });
         }
 
-        // 1) Best-effort duplicate check (notify only — never block Trello creation).
-        if (duplicateCheck.status === 'running') await (duplicateCheckPromise || runDuplicateCheckEarly(false));
-        if (duplicateCheck.status === 'idle' || isDuplicateCheckStale()) await runDuplicateCheckEarly(true);
+        // 1) Kick off duplicate check in background only — competitor API + many channel fetches
+        //    often take 30–60s+; never wait on that before Trello (banner updates when done).
+        if (duplicateCheck.status === 'running') {
+          if (!duplicateCheckPromise) runDuplicateCheckEarly(false);
+        } else if (duplicateCheck.status === 'idle' || isDuplicateCheckStale()) {
+          void runDuplicateCheckEarly(true);
+        }
 
         // 2) Optional dry-run to check if folder already exists (no Trello card created yet).
         if (!forceNewFolder) {
@@ -1465,12 +1452,13 @@
     // Restore history from localStorage (6h TTL)
     history = loadHistory();
     loadSavedVoice();
-    loadSavedOutputLanguage();
     loadTrelloPrefs();
-    if (history.length > 0 && history[0].output_language) {
-      selectedOutputLang = history[0].output_language === 'english' ? 'english' : 'german';
-      selectedOutputLangLabel = selectedOutputLang === 'english' ? 'English' : 'German';
-    }
+    selectedOutputLang = 'german';
+    selectedOutputLangLabel = 'German';
+    try {
+      const storage = getStorage();
+      if (storage) storage.removeItem(OUTPUT_LANG_STORAGE_KEY);
+    } catch (_) {}
     applyOutputLanguageUi();
     applyVoiceSelection();
     if (history.length > 0) {
